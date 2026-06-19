@@ -57,6 +57,14 @@ pub fn task_voters_key(task_id: u64) -> DataKey {
     DataKey::TaskVoters(task_id)
 }
 
+pub fn voted_key(task_id: u64, voter: Address) -> DataKey {
+    DataKey::Voted(task_id, voter)
+}
+
+pub fn all_tasks_key() -> DataKey {
+    DataKey::AllTasks
+}
+
 pub fn get_task_voters(env: &Env, task_id: u64) -> Vec<Address> {
     env.storage()
         .instance()
@@ -67,5 +75,7 @@ pub fn get_task_voters(env: &Env, task_id: u64) -> Vec<Address> {
 pub fn append_task_voter(env: &Env, task_id: u64, voter: &Address) {
     let mut voters = get_task_voters(env, task_id);
     voters.push_back(voter.clone());
-    env.storage().instance().set(&task_voters_key(task_id), &voters);
+    env.storage()
+        .instance()
+        .set(&task_voters_key(task_id), &voters);
 }

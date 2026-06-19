@@ -3,7 +3,7 @@ use soroban_sdk::{Address, Env, Vec};
 use crate::events;
 use crate::reentrancy;
 use crate::storage;
-use crate::types::{ContractError, DataKey, Task};
+use crate::types::{ContractError, Task};
 use crate::validation;
 
 /// A task is "terminal" when it has been fully resolved or explicitly cancelled.
@@ -41,7 +41,7 @@ pub fn register_tasks(env: &Env, admin: Address, task_ids: Vec<u64>) -> Result<(
     let mut all_tasks: Vec<u64> = env
         .storage()
         .instance()
-        .get(&crate::types::DataKey::AllTasks)
+        .get(&storage::all_tasks_key())
         .unwrap_or(Vec::new(env));
 
     for task_id in task_ids.iter() {
@@ -66,7 +66,7 @@ pub fn register_tasks(env: &Env, admin: Address, task_ids: Vec<u64>) -> Result<(
 
     env.storage()
         .instance()
-        .set(&DataKey::AllTasks, &all_tasks);
+        .set(&storage::all_tasks_key(), &all_tasks);
 
     reentrancy::unlock(env);
     Ok(())
@@ -95,17 +95,17 @@ pub fn get_task(env: &Env, task_id: u64) -> Option<Task> {
 pub fn get_all_tasks(env: &Env) -> Vec<u64> {
     env.storage()
         .instance()
-        .get(&crate::types::DataKey::AllTasks)
+        .get(&storage::all_tasks_key())
         .unwrap_or(Vec::new(env))
 }
 
 /// Purge a terminal task (done or cancelled) from contract storage.
 ///
 /// Removes:
-/// - `ActiveTask(task_id)` — the live task entry
-/// - `ArchivedTask(task_id)` — the archived copy, if one exists
-/// - `TaskVoters(task_id)` — the per-task voter list
-/// - `Voted(task_id, voter)` — each individual vote record
+/// - the active task key — the live task entry
+/// - the archived task key — the archived copy, if one exists
+/// - the task voters key — the per-task voter list
+/// - the voted key — each individual vote record
 /// - The task_id entry in the `AllTasks` index
 ///
 /// Reverts with `TaskNotFound` when no active or archived task exists for the
@@ -131,25 +131,25 @@ pub fn purge_task(env: &Env, admin: Address, task_id: u64) -> Result<(), Contrac
     for voter in voters.iter() {
         env.storage()
             .instance()
-            .remove(&DataKey::Voted(task_id, voter.clone()));
+            .remove(&storage::voted_key(task_id, voter.clone()));
     }
     env.storage()
         .instance()
-        .remove(&DataKey::TaskVoters(task_id));
+        .remove(&storage::task_voters_key(task_id));
 
     // 2. Remove the task entry from whichever storage slot holds it.
     env.storage()
         .instance()
-        .remove(&DataKey::ActiveTask(task_id));
+        .remove(&storage::active_task_key(task_id));
     env.storage()
         .instance()
-        .remove(&DataKey::ArchivedTask(task_id));
+        .remove(&storage::archived_task_key(task_id));
 
     // 3. Remove task_id from the AllTasks index.
     let all_tasks: Vec<u64> = env
         .storage()
         .instance()
-        .get(&DataKey::AllTasks)
+        .get(&storage::all_tasks_key())
         .unwrap_or(Vec::new(env));
     let mut updated = Vec::new(env);
     for id in all_tasks.iter() {
@@ -157,7 +157,9 @@ pub fn purge_task(env: &Env, admin: Address, task_id: u64) -> Result<(), Contrac
             updated.push_back(id);
         }
     }
-    env.storage().instance().set(&DataKey::AllTasks, &updated);
+    env.storage()
+        .instance()
+        .set(&storage::all_tasks_key(), &updated);
 
     events::emit_task_purged(env, task_id);
 

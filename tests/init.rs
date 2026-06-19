@@ -1,6 +1,9 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger as _},
+    Address, Env,
+};
 use vero_core_contracts::VeroContractClient;
 
 #[test]
@@ -51,4 +54,14 @@ fn test_admin_stored_on_initialize() {
     client.initialize(&admin, &token.address(), &100i128);
 
     assert_eq!(client.get_admin(), Some(admin));
+}
+
+#[test]
+fn test_get_ledger_returns_current_sequence() {
+    let env = Env::default();
+    env.ledger().set_sequence_number(42_424);
+    let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+    let client = VeroContractClient::new(&env, &contract_id);
+
+    assert_eq!(client.get_ledger(), 42_424);
 }

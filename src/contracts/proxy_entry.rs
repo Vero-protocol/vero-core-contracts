@@ -279,6 +279,10 @@ impl VeroContract {
             .get(&DataKey::WithdrawalTimelock(guardian))
     }
 
+    pub fn get_ledger(env: Env) -> u32 {
+        env.ledger().sequence()
+    }
+
     pub fn batch_execute(
         env: Env,
         calls: soroban_sdk::Vec<BatchCall>,

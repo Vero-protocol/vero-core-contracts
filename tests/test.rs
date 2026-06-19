@@ -399,6 +399,23 @@ fn test_vote_allowed_at_minimum_reputation_threshold() {
 }
 
 #[test]
+fn vote_rejects_zero_task_id_without_recording_vote() {
+    let (env, _contract_id, admin, token, client) = setup();
+    let g = add_guardian_with_rep(&env, &client, &admin, 100);
+    client.register_task(&admin, &10u64);
+    lock_for_guardian(&env, &token, &client, &g, 101);
+
+    let result = client.try_vote(&g, &0u64);
+    assert!(result.is_err());
+    assert!(client.get_task(&0u64).is_none());
+
+    let task = client.get_task(&10u64).unwrap();
+    assert_eq!(task.votes, 0);
+    assert_eq!(task.total_weight_accrued, 0);
+    assert!(!task.is_done);
+}
+
+#[test]
 fn test_vote_on_nonexistent_task_rejected() {
     let (env, _contract_id, admin, _token, client) = setup();
     let g = add_guardian_with_rep(&env, &client, &admin, 100);
@@ -1611,6 +1628,27 @@ fn test_vote_batch_reverts_on_invalid_task() {
     // No vote should persist
     let task = client.get_task(&10u64).unwrap();
     assert_eq!(task.votes, 0);
+    assert!(!task.is_done);
+}
+
+#[test]
+fn test_vote_batch_reverts_on_zero_task_id_without_partial_apply() {
+    let (env, _contract_id, admin, token, client) = setup();
+    client.set_weight_threshold(&admin, &300u64);
+
+    let guardian = add_guardian_with_rep(&env, &client, &admin, 300);
+    lock_for_guardian(&env, &token, &client, &guardian, 101);
+
+    client.register_task(&admin, &11u64);
+
+    let ids = SorobanVec::from_array(&env, [11u64, 0u64]);
+    let result = client.try_vote_batch(&guardian, &ids);
+    assert!(result.is_err());
+    assert!(client.get_task(&0u64).is_none());
+
+    let task = client.get_task(&11u64).unwrap();
+    assert_eq!(task.votes, 0);
+    assert_eq!(task.total_weight_accrued, 0);
     assert!(!task.is_done);
 }
 

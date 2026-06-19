@@ -2,7 +2,7 @@ use crate::types::{ContractError, DataKey, Snapshot};
 use crate::DEFAULT_WEIGHT_THRESHOLD;
 use crate::{
     circuit_breaker, drips, events, guardian, reentrancy, reputation, storage, task, timelock,
-    vault,
+    validation, vault,
 };
 use soroban_sdk::{Address, Env, Map, Vec};
 
@@ -119,6 +119,11 @@ pub(crate) fn process_vote(
         return Err(ContractError::InsufficientLockedBalance);
     }
 
+    if let Err(e) = validation::validate_task_id(task_id) {
+        reentrancy::unlock(env);
+        return Err(e);
+    }
+
     let voted_key = DataKey::Voted(task_id, guardian.clone());
     if env.storage().instance().has(&voted_key) {
         reentrancy::unlock(env);
@@ -200,6 +205,8 @@ pub(crate) fn vote_inner(
     task_id: u64,
     weight: u64,
 ) -> Result<(), ContractError> {
+    validation::validate_task_id(task_id)?;
+
     let voted_key = DataKey::Voted(task_id, guardian.clone());
     if env.storage().instance().has(&voted_key) {
         return Err(ContractError::DuplicateVote);

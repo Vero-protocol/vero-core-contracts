@@ -15,10 +15,10 @@ crate-type = ["cdylib", "rlib"]
 verification = []
 
 [dependencies]
-soroban-sdk = { version = "21.0.0", features = ["alloc"] }
+soroban-sdk = { version = "21.0.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
-soroban-sdk = { version = "21.0.0", features = ["testutils"] }
+soroban-sdk = { version = "21.0.0", default-features = false, features = ["testutils"] }
 
 [profile.release]
 opt-level = "z"

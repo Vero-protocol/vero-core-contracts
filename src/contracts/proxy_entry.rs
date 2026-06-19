@@ -5,10 +5,15 @@ use crate::{circuit_breaker, drips, events, guardian, reputation, storage, task}
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
 #[contract]
+/// Public Soroban entrypoint for the Vero core protocol contract.
 pub struct VeroContract;
 
 #[contractimpl]
 impl VeroContract {
+    /// Initialize the contract with its admin, token, and guardian lock threshold.
+    ///
+    /// May only run once. Stores the initial admin, token address, lock threshold,
+    /// and unpaused state, then extends instance storage TTL.
     pub fn initialize(
         env: Env,
         admin: Address,
@@ -34,10 +39,12 @@ impl VeroContract {
         Ok(())
     }
 
+    /// Return the configured admin address, if the contract has been initialized.
     pub fn get_admin(env: Env) -> Option<Address> {
         env.storage().instance().get(&DataKey::Admin)
     }
 
+    /// Flip the paused flag after authenticating the supplied admin address.
     pub fn toggle_pause(env: Env, admin: Address) -> Result<(), ContractError> {
         admin.require_auth();
         let current = env
@@ -49,18 +56,21 @@ impl VeroContract {
         Ok(())
     }
 
+    /// Pause sensitive protocol actions after authenticating the supplied admin address.
     pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &true);
         Ok(())
     }
 
+    /// Resume sensitive protocol actions after authenticating the supplied admin address.
     pub fn unpause(env: Env, admin: Address) -> Result<(), ContractError> {
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &false);
         Ok(())
     }
 
+    /// Return whether sensitive protocol actions are currently paused.
     pub fn is_paused(env: Env) -> bool {
         env.storage()
             .instance()
@@ -68,12 +78,19 @@ impl VeroContract {
             .unwrap_or(false)
     }
 
+    /// Add a guardian to the active guardian registry.
+    ///
+    /// The contract must not be paused. The admin is authenticated and guardian
+    /// address validation is delegated to the guardian module.
     pub fn add_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
         circuit_breaker::require_not_paused(&env)?;
         guardian::add_guardian(&env, admin, guardian);
         Ok(())
     }
 
+    /// Remove a guardian from the active guardian registry.
+    ///
+    /// The contract must not be paused and the admin must authorize the removal.
     pub fn remove_guardian(
         env: Env,
         admin: Address,
@@ -84,10 +101,14 @@ impl VeroContract {
         Ok(())
     }
 
+    /// Return whether an address is currently registered as a guardian.
     pub fn is_guardian(env: Env, guardian: Address) -> bool {
         guardian::is_guardian(&env, &guardian)
     }
 
+    /// Set a guardian reputation score used for voting-power calculations.
+    ///
+    /// The contract must not be paused and the admin must authorize the update.
     pub fn set_reputation(
         env: Env,
         admin: Address,
@@ -99,30 +120,37 @@ impl VeroContract {
         Ok(())
     }
 
+    /// Return a guardian reputation score, if one has been configured.
     pub fn get_reputation(env: Env, guardian: Address) -> Option<u64> {
         reputation::get_reputation(&env, &guardian)
     }
 
+    /// Calculate voting power derived from the guardian reputation model.
     pub fn calculate_voting_power(env: Env, guardian: Address) -> Option<u64> {
         reputation::calculate_voting_power(&env, &guardian)
     }
 
+    /// Lock protocol tokens for a guardian before participating in votes.
     pub fn lock_tokens(env: Env, guardian: Address, amount: i128) -> Result<(), ContractError> {
         logic::lock_tokens(&env, guardian, amount)
     }
 
+    /// Start the guardian withdrawal timelock before tokens can be unlocked.
     pub fn request_unlock(env: Env, guardian: Address) -> Result<(), ContractError> {
         logic::request_unlock(&env, guardian)
     }
 
+    /// Unlock a non-guardian's tokens after the withdrawal timelock expires.
     pub fn unlock_tokens(env: Env, guardian: Address) -> Result<(), ContractError> {
         logic::unlock_tokens(&env, guardian)
     }
 
+    /// Remove the caller from the guardian set and unlock tokens after timelock expiry.
     pub fn resign_guardian(env: Env, guardian: Address) -> Result<(), ContractError> {
         logic::resign_guardian(&env, guardian)
     }
 
+    /// Set the task resolution weight threshold after admin authentication.
     pub fn set_weight_threshold(
         env: Env,
         admin: Address,
@@ -135,6 +163,7 @@ impl VeroContract {
         Ok(())
     }
 
+    /// Return the configured resolution threshold or the protocol default.
     pub fn get_weight_threshold(env: Env) -> u64 {
         env.storage()
             .instance()
@@ -142,11 +171,16 @@ impl VeroContract {
             .unwrap_or(DEFAULT_WEIGHT_THRESHOLD)
     }
 
+    /// Store the vault contract address used when resolved tasks release funds.
     pub fn set_vault_address(env: Env, admin: Address, vault: Address) {
         admin.require_auth();
         env.storage().instance().set(&DataKey::VaultAddress, &vault);
     }
 
+    /// Register a new task id for guardian voting.
+    ///
+    /// The contract must not be paused and the supplied admin must match stored
+    /// admin state before delegating to the task registration module.
     pub fn register_task(env: Env, admin: Address, task_id: u64) -> Result<(), ContractError> {
         circuit_breaker::require_not_paused(&env)?;
         let stored_admin: Address = env
@@ -161,6 +195,7 @@ impl VeroContract {
         task::register_tasks(&env, admin, task_ids)
     }
 
+    /// Cancel an active task after admin authentication.
     pub fn cancel_task(env: Env, admin: Address, task_id: u64) -> Result<(), ContractError> {
         circuit_breaker::require_not_paused(&env)?;
         task::cancel_task(&env, admin, task_id)
@@ -186,10 +221,12 @@ impl VeroContract {
         task::purge_task(&env, admin, task_id)
     }
 
+    /// Cast a guardian vote for a single active task.
     pub fn vote(env: Env, guardian: Address, task_id: u64) -> Result<(), ContractError> {
         logic::process_vote(&env, guardian, task_id)
     }
 
+    /// Cast guardian votes for multiple task ids in one atomic batch.
     pub fn vote_batch(
         env: Env,
         guardian: Address,
@@ -198,18 +235,24 @@ impl VeroContract {
         logic::process_vote_batch(&env, guardian, task_ids)
     }
 
+    /// Return the active task state for a task id, if present.
     pub fn get_task(env: Env, task_id: u64) -> Option<crate::types::Task> {
         task::get_task(&env, task_id)
     }
 
+    /// Move a task from active storage into the archive.
     pub fn archive_task(env: Env, task_id: u64) -> Result<(), ContractError> {
         storage::archive_task(&env, task_id)
     }
 
+    /// Return archived task state for a task id, if present.
     pub fn get_archived_task(env: Env, task_id: u64) -> Option<crate::types::Task> {
         storage::get_archived_task(&env, task_id)
     }
 
+    /// Start a reward stream for a resolved task through the configured drips contract.
+    ///
+    /// Emits success or failure events around the downstream drips invocation.
     pub fn start_reward_stream(
         env: Env,
         admin: Address,
@@ -230,35 +273,43 @@ impl VeroContract {
         result
     }
 
+    /// Return reward stream metadata for a task id, if a stream is active.
     pub fn get_reward_stream(env: Env, task_id: u64) -> Option<RewardStream> {
         drips::get_reward_stream(&env, task_id)
     }
 
+    /// Record a circuit-breaker failure signal.
     pub fn record_failure(env: Env) {
         circuit_breaker::record_failure(&env);
     }
 
+    /// Reset the circuit breaker after admin authentication.
     pub fn reset_circuit_breaker(env: Env, admin: Address) {
         circuit_breaker::reset(&env, admin);
     }
 
+    /// Estimate gas cost for a supported operation kind.
     pub fn get_estimated_cost(_env: Env, op: crate::types::Operation) -> u64 {
         crate::gas::get_estimated_cost(op)
     }
 
+    /// Upgrade this contract to a new WASM hash after admin authentication.
     pub fn upgrade_contract(env: Env, admin: Address, new_wasm_hash: soroban_sdk::BytesN<32>) {
         admin.require_auth();
         env.deployer().update_current_contract_wasm(new_wasm_hash);
     }
 
+    /// Return a current aggregate snapshot of protocol state.
     pub fn get_snapshot(env: Env) -> Snapshot {
         logic::get_snapshot(&env)
     }
 
+    /// Record the current aggregate snapshot in snapshot history.
     pub fn record_snapshot(env: Env) -> Result<(), ContractError> {
         logic::record_snapshot(&env)
     }
 
+    /// Return timestamps for all recorded snapshots.
     pub fn get_snapshot_history(env: Env) -> soroban_sdk::Vec<u64> {
         env.storage()
             .instance()
@@ -266,6 +317,7 @@ impl VeroContract {
             .unwrap_or(soroban_sdk::Vec::new(&env))
     }
 
+    /// Return a recorded snapshot by timestamp.
     pub fn get_snapshot_at(env: Env, timestamp: u64) -> Result<Snapshot, ContractError> {
         env.storage()
             .instance()
@@ -273,12 +325,16 @@ impl VeroContract {
             .ok_or(ContractError::SnapshotNotFound)
     }
 
+    /// Return the withdrawal timelock ledger timestamp for a guardian, if present.
     pub fn get_withdrawal_timelock(env: Env, guardian: Address) -> Option<u64> {
         env.storage()
             .instance()
             .get(&DataKey::WithdrawalTimelock(guardian))
     }
 
+    /// Execute a sequence of supported protocol calls in order.
+    ///
+    /// Stops at the first failing call and returns its error.
     pub fn batch_execute(
         env: Env,
         calls: soroban_sdk::Vec<BatchCall>,

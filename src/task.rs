@@ -64,9 +64,7 @@ pub fn register_tasks(env: &Env, admin: Address, task_ids: Vec<u64>) -> Result<(
         all_tasks.push_back(task_id);
     }
 
-    env.storage()
-        .instance()
-        .set(&DataKey::AllTasks, &all_tasks);
+    env.storage().instance().set(&DataKey::AllTasks, &all_tasks);
 
     reentrancy::unlock(env);
     Ok(())

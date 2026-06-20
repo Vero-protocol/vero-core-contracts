@@ -67,5 +67,7 @@ pub fn get_task_voters(env: &Env, task_id: u64) -> Vec<Address> {
 pub fn append_task_voter(env: &Env, task_id: u64, voter: &Address) {
     let mut voters = get_task_voters(env, task_id);
     voters.push_back(voter.clone());
-    env.storage().instance().set(&task_voters_key(task_id), &voters);
+    env.storage()
+        .instance()
+        .set(&task_voters_key(task_id), &voters);
 }

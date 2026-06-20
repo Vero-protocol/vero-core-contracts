@@ -1,7 +1,7 @@
-use soroban_sdk::{Address, Env};
 use crate::guardian;
 use crate::types::{ContractError, DataKey};
 use crate::validation;
+use soroban_sdk::{Address, Env};
 
 /// Minimum reputation score required to cast a vote.
 /// Scores below this threshold are considered "low reputation" and are rejected.

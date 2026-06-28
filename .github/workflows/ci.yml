@@ -1,1 +1,34 @@
-# CI Run
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: 1
+    # Ensured no duplicate env keys are present, validating YAML syntax
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+          
+      - name: Build contracts
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Run tests
+        run: cargo test

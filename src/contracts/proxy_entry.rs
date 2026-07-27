@@ -177,6 +177,12 @@ impl VeroContract {
         logic::unlock_tokens(&env, guardian)
     }
 
+    /// Recovers tokens from the contract in emergency situations.
+    ///
+    /// Note: This function deliberately bypasses the circuit breaker pause gate
+    /// (`require_not_paused`), as it serves as the recovery mechanism of last resort
+    /// when normal contract operations are halted or paused. Requires the caller
+    /// to hold the `EmergencyManager` role.
     pub fn emergency_recover(
         env: Env,
         admin: Address,

@@ -1,0 +1,43 @@
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+# "warn" not "deny": soroban-sdk pulls in soroban-wasmi (test/dev only), which
+# pins an old `spin` release that has since been yanked upstream. Not our
+# dependency to bump; tracked upstream in soroban-sdk.
+yanked = "warn"
+ignore = [
+    # paste - no longer maintained. Transitive via soroban-wasmi (soroban-sdk
+    # testutils), not an active vulnerability. Revisit when soroban-sdk drops it.
+    "RUSTSEC-2024-0436",
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+# vero-core-contracts / vero-verification are unpublished (publish = false);
+# don't require a license field on our own workspace crates.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -45,7 +45,7 @@ pub fn register_tasks(
 
     reentrancy::lock(env)?;
 
-    let all_tasks: Vec<u64> = env
+    let mut all_tasks: Vec<u64> = env
         .storage()
         .instance()
         .get(&DataKey::AllTasks)
@@ -67,6 +67,7 @@ pub fn register_tasks(
             min_votes_required,
         };
         storage::set_active_task(env, &task);
+        all_tasks.push_back(task_id);
         events::emit_task_registered(env, &admin, task_id);
     }
 

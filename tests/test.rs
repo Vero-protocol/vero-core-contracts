@@ -1226,7 +1226,9 @@ fn test_simulated_migration_failure_rolls_back() {
 
     // Simulate pre-versioning state and invalid state to fail pre-flight validation
     env.as_contract(&contract_id, || {
-        env.storage().instance().set(&DataKey::StorageVersion, &0u32);
+        env.storage()
+            .instance()
+            .set(&DataKey::StorageVersion, &0u32);
         env.storage().instance().set(&DataKey::FeeBps, &10001u32); // invalid fee_bps > 10000
     });
 
@@ -1235,7 +1237,10 @@ fn test_simulated_migration_failure_rolls_back() {
 
     // Running migration fails due to pre-flight check failure
     let result = client.try_migrate_storage(&admin);
-    assert!(result.is_err(), "expected migration to fail due to pre-flight check");
+    assert!(
+        result.is_err(),
+        "expected migration to fail due to pre-flight check"
+    );
 
     // The version remains 0 (rollback succeeded, state was not committed)
     assert_eq!(client.get_storage_version(), 0);

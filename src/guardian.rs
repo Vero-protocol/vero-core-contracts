@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
-use soroban_sdk::{panic_with_error, Address, Env, Vec};
+use soroban_sdk::{Address, Env, Vec};
 
-use crate::types::{ContractError, DataKey, Error};
+use crate::types::{ContractError, DataKey};
 use crate::validation;
 
 const LEDGER_TTL: u32 = 100_000;
@@ -43,7 +43,7 @@ pub fn remove_guardian(env: &Env, admin: Address, guardian: Address) -> Result<(
 
     let key = DataKey::Guardian(guardian.clone());
     if !env.storage().instance().has(&key) {
-        panic_with_error!(env, Error::NotGuardian);
+        return Err(ContractError::NotGuardian);
     }
 
     env.storage().instance().remove(&key);

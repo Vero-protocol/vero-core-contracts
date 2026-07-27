@@ -515,6 +515,57 @@ fn test_non_emergency_manager_cannot_reset_circuit_breaker() {
     assert!(client.is_paused());
 }
 
+#[test]
+fn test_emergency_recover_bypasses_pause() {
+    let (env, admin, token, client) = setup();
+    let manager = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    client.grant_role(&admin, &manager, &Role::EmergencyManager);
+
+    // Fund the contract address with tokens
+    let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
+    token_admin_client.mint(&client.address, &1000);
+
+    // Pause the contract explicitly
+    client.pause(&manager);
+    assert!(client.is_paused());
+
+    // Emergency recover should succeed even when the contract is paused
+    let result = client.try_emergency_recover(&manager, &recipient, &500);
+    assert!(result.is_ok());
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    assert_eq!(token_client.balance(&recipient), 500);
+    assert_eq!(token_client.balance(&client.address), 500);
+}
+
+#[test]
+fn test_emergency_recover_bypasses_circuit_breaker_trip() {
+    let (env, admin, token, client) = setup();
+    let manager = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    client.grant_role(&admin, &manager, &Role::EmergencyManager);
+
+    // Fund the contract address with tokens
+    let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
+    token_admin_client.mint(&client.address, &1000);
+
+    // Trip the circuit breaker automatically via 51 failures
+    for _ in 0..51 {
+        client.record_failure();
+    }
+    assert!(client.is_paused());
+
+    // Emergency recover should succeed when circuit breaker is tripped
+    let result = client.try_emergency_recover(&manager, &recipient, &400);
+    assert!(result.is_ok());
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    assert_eq!(token_client.balance(&recipient), 400);
+}
+
 // ─── Per-Function Access Control: TreasuryManager ───────────────────
 
 #[test]

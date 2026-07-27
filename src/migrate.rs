@@ -9,7 +9,7 @@
 //! an atomic "Pre-Flight" validation check before committing state changes.
 
 use crate::types::{ContractError, DataKey};
-use soroban_sdk::{log, Address, Env, Map, TryFromVal, Val, IntoVal};
+use soroban_sdk::{log, Address, Env, IntoVal, Map, TryFromVal, Val};
 
 /// The current on-chain storage schema version.
 /// Increment this constant whenever the storage layout changes.
@@ -123,7 +123,12 @@ pub fn validate_migration(env: &Env, cache: &MigrationCache) -> Result<(), Contr
     // 1. Verify StorageVersion is CURRENT_VERSION
     let version: u32 = cache.get(&DataKey::StorageVersion).unwrap_or(0);
     if version != CURRENT_VERSION {
-        log!(env, "Validation failed: version mismatch. expected: {}, got: {}", CURRENT_VERSION, version);
+        log!(
+            env,
+            "Validation failed: version mismatch. expected: {}, got: {}",
+            CURRENT_VERSION,
+            version
+        );
         return Err(ContractError::InvalidVersion);
     }
 
@@ -162,7 +167,11 @@ pub fn validate_migration(env: &Env, cache: &MigrationCache) -> Result<(), Contr
     // 6. Validate WeightThreshold if present
     if let Some(threshold) = cache.get::<u64>(&DataKey::WeightThreshold) {
         if let Err(e) = crate::validation::validate_weight_threshold(threshold) {
-            log!(env, "Validation failed: invalid weight threshold.", threshold);
+            log!(
+                env,
+                "Validation failed: invalid weight threshold.",
+                threshold
+            );
             return Err(e);
         }
     }
@@ -188,7 +197,12 @@ pub fn migrate(env: &Env) -> Result<(), ContractError> {
         return Ok(()); // already up to date
     }
 
-    log!(env, "Starting atomic storage migration from version {} to {}", current, CURRENT_VERSION);
+    log!(
+        env,
+        "Starting atomic storage migration from version {} to {}",
+        current,
+        CURRENT_VERSION
+    );
 
     // Initialize temporary cache
     let mut cache = MigrationCache::new(env);
@@ -205,12 +219,19 @@ pub fn migrate(env: &Env) -> Result<(), ContractError> {
     // Run Pre-Flight check
     match validate_migration(env, &cache) {
         Ok(_) => {
-            log!(env, "Migration pre-flight checks passed. Committing changes to storage.");
+            log!(
+                env,
+                "Migration pre-flight checks passed. Committing changes to storage."
+            );
             cache.commit();
             Ok(())
         }
         Err(err) => {
-            log!(env, "Migration FAILED at pre-flight check! Aborting and rolling back. Error: {:?}", err);
+            log!(
+                env,
+                "Migration FAILED at pre-flight check! Aborting and rolling back. Error: {:?}",
+                err
+            );
             Err(err)
         }
     }

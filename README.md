@@ -297,6 +297,12 @@ of generating distinct values.
 
 ---
 
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for dev environment setup, build/test/lint instructions, branch and PR conventions, and how to find good first issues.
+
+---
+
 ## License
 
 Apache-2.0

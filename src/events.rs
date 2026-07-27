@@ -9,7 +9,7 @@ use soroban_sdk::{symbol_short, Address, Env};
 #[inline]
 fn pack_vote_data(task_id: u64, weight: u64) -> u64 {
     let tid = (task_id & 0xFFFF_FFFF) as u32;
-    let w = (weight.min(0xFFFF_FFFF as u64)) as u32;
+    let w = (weight.min(0xFFFF_FFFF_u64)) as u32;
     ((w as u64) << 32) | (tid as u64)
 }
 

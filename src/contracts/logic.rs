@@ -16,12 +16,10 @@ pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<
         .ok_or(ContractError::NotInitialized)?;
 
     let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0);
-    let mut fee_amount = 0;
     let mut net_amount = amount;
 
     if fee_bps > 0 {
-        fee_amount = (amount * (fee_bps as i128)) / 10000;
-        net_amount = amount - fee_amount;
+        let fee_amount = (amount * (fee_bps as i128)) / 10000;
         if fee_amount > 0 {
             if let Some(treasury) = env
                 .storage()
@@ -30,9 +28,7 @@ pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<
             {
                 let token_client = soroban_sdk::token::Client::new(env, &token);
                 token_client.transfer(&guardian, &treasury, &fee_amount);
-            } else {
-                net_amount = amount;
-                fee_amount = 0;
+                net_amount = amount - fee_amount;
             }
         }
     }
@@ -75,12 +71,10 @@ pub(crate) fn unlock_tokens(env: &Env, guardian: Address) -> Result<(), Contract
         let token_client = soroban_sdk::token::Client::new(env, &token);
 
         let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0);
-        let mut fee_amount = 0;
         let mut net_amount = amount;
 
         if fee_bps > 0 {
-            fee_amount = (amount * (fee_bps as i128)) / 10000;
-            net_amount = amount - fee_amount;
+            let fee_amount = (amount * (fee_bps as i128)) / 10000;
             if fee_amount > 0 {
                 if let Some(treasury) = env
                     .storage()
@@ -88,9 +82,7 @@ pub(crate) fn unlock_tokens(env: &Env, guardian: Address) -> Result<(), Contract
                     .get::<_, Address>(&DataKey::TreasuryAddress)
                 {
                     token_client.transfer(&env.current_contract_address(), &treasury, &fee_amount);
-                } else {
-                    net_amount = amount;
-                    fee_amount = 0;
+                    net_amount = amount - fee_amount;
                 }
             }
         }
@@ -149,12 +141,10 @@ pub(crate) fn resign_guardian(env: &Env, guardian: Address) -> Result<(), Contra
         let token_client = soroban_sdk::token::Client::new(env, &token);
 
         let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0);
-        let mut fee_amount = 0;
         let mut net_amount = amount;
 
         if fee_bps > 0 {
-            fee_amount = (amount * (fee_bps as i128)) / 10000;
-            net_amount = amount - fee_amount;
+            let fee_amount = (amount * (fee_bps as i128)) / 10000;
             if fee_amount > 0 {
                 if let Some(treasury) = env
                     .storage()
@@ -162,9 +152,7 @@ pub(crate) fn resign_guardian(env: &Env, guardian: Address) -> Result<(), Contra
                     .get::<_, Address>(&DataKey::TreasuryAddress)
                 {
                     token_client.transfer(&env.current_contract_address(), &treasury, &fee_amount);
-                } else {
-                    net_amount = amount;
-                    fee_amount = 0;
+                    net_amount = amount - fee_amount;
                 }
             }
         }
@@ -243,22 +231,30 @@ pub(crate) fn process_vote(
         return Err(ContractError::TaskCancelled);
     }
 
-    t.total_weight_accrued = match t.total_weight_accrued.checked_add(weight) {
-        Some(v) => v,
-        None => {
-            reentrancy::unlock(env);
-            return Err(ContractError::WeightOverflow);
-        }
-    };
-    t.votes += 1;
-
     let weight_threshold: u64 = env
         .storage()
         .instance()
         .get(&DataKey::WeightThreshold)
         .unwrap_or(DEFAULT_WEIGHT_THRESHOLD);
 
-    if t.total_weight_accrued >= weight_threshold && t.votes >= t.min_votes_required && !t.is_done {
+    // Delegate to the Kani-verified consensus module so the on-chain vote
+    // path is exactly the logic proved by the harnesses in `verification/`.
+    let mut consensus_state = crate::consensus::ConsensusState {
+        total_weight_accrued: t.total_weight_accrued,
+        votes: t.votes,
+        is_done: t.is_done,
+    };
+    if let Err(e) = crate::consensus::apply_vote(&mut consensus_state, weight, weight_threshold) {
+        reentrancy::unlock(env);
+        return Err(match e {
+            crate::consensus::ConsensusError::WeightOverflow => ContractError::WeightOverflow,
+            crate::consensus::ConsensusError::ZeroWeight => ContractError::ZeroWeightVote,
+        });
+    }
+    t.total_weight_accrued = consensus_state.total_weight_accrued;
+    t.votes = consensus_state.votes;
+
+    if consensus_state.is_done && t.votes >= t.min_votes_required && !t.is_done {
         t.is_done = true;
         t.resolved_at = env.ledger().timestamp();
         events::emit_task_resolved(env, task_id, t.total_weight_accrued);
@@ -306,19 +302,29 @@ pub(crate) fn vote_inner(
         return Err(ContractError::TaskCancelled);
     }
 
-    t.total_weight_accrued = match t.total_weight_accrued.checked_add(weight) {
-        Some(v) => v,
-        None => return Err(ContractError::WeightOverflow),
-    };
-    t.votes += 1;
-
     let weight_threshold: u64 = env
         .storage()
         .instance()
         .get(&DataKey::WeightThreshold)
         .unwrap_or(DEFAULT_WEIGHT_THRESHOLD);
 
-    if t.total_weight_accrued >= weight_threshold && t.votes >= t.min_votes_required && !t.is_done {
+    // Delegate to the Kani-verified consensus module so the on-chain vote
+    // path is exactly the logic proved by the harnesses in `verification/`.
+    let mut consensus_state = crate::consensus::ConsensusState {
+        total_weight_accrued: t.total_weight_accrued,
+        votes: t.votes,
+        is_done: t.is_done,
+    };
+    crate::consensus::apply_vote(&mut consensus_state, weight, weight_threshold).map_err(|e| {
+        match e {
+            crate::consensus::ConsensusError::WeightOverflow => ContractError::WeightOverflow,
+            crate::consensus::ConsensusError::ZeroWeight => ContractError::ZeroWeightVote,
+        }
+    })?;
+    t.total_weight_accrued = consensus_state.total_weight_accrued;
+    t.votes = consensus_state.votes;
+
+    if consensus_state.is_done && t.votes >= t.min_votes_required && !t.is_done {
         t.is_done = true;
         t.resolved_at = env.ledger().timestamp();
         events::emit_task_resolved(env, task_id, t.total_weight_accrued);

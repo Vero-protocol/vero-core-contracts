@@ -2,6 +2,7 @@
 name = "vero-verification"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 # This crate is ONLY for formal verification harnesses.
 # It is never compiled into the WASM artifact.

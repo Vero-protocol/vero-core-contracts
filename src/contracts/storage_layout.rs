@@ -27,6 +27,16 @@ pub enum DataKey {
     LockedBalance(Address),
     Lock,
     FailureCount,
+    /// Last ledger sequence at which this address reported a failure (u32).
+    /// Backs the per-reporter cooldown of the circuit breaker.
+    LastFailureReport(Address),
+    /// Number of failure reports this address has contributed to the current
+    /// breaker window (u32). Capped by `MAX_REPORTS_PER_REPORTER`.
+    ReporterFailureCount(Address),
+    /// `Vec<Address>` — distinct reporters that contributed to the current window.
+    FailureReporters,
+    /// bool — when true, only guardians / EmergencyManager / Admin may report failures.
+    TrustedReportersOnly,
     Paused,
     AllGuardians,
     AllTasks,

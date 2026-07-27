@@ -17,7 +17,7 @@ On-chain GitHub PR verification for the Stellar ecosystem. Guardians — trusted
 │  get_task(task_id) ──► Task { id, votes, is_done, weight }       │
 │                                                                  │
 │  pause(admin) / unpause(admin) / toggle_pause(admin)            │
-│  record_failure() ──► circuit breaker (auto-pause at >50)       │
+│  record_failure(reporter) ──► rate-limited, quorum-gated breaker │
 │  reset_circuit_breaker(admin)                                    │
 └──────────────────────────────────────┬───────────────────────────┘
                                        │ instance storage
@@ -51,7 +51,7 @@ On-chain GitHub PR verification for the Stellar ecosystem. Guardians — trusted
 | `guardian` | Guardian registry with TTL-extended instance storage |
 | `task` | Task registration and retrieval |
 | `reputation` | Guardian reputation scores and voting power calculation |
-| `circuit_breaker` | Emergency halt: `require_not_paused`, `record_failure`, `reset` |
+| `circuit_breaker` | Emergency halt + DoS-resistant failure reporting: `require_not_paused`, `record_failure`, `reset` |
 | `reentrancy` | Mutex lock/unlock guarding `vote` and `register_task` |
 | `drips` | Cross-contract reward stream initiation via Drips protocol |
 | `vault` | Cross-contract escrow release on task resolution |
@@ -141,6 +141,10 @@ pub enum DataKey {
     LockedBalance(Address), // i128 — tokens locked by a guardian
     Lock,                   // re-entrancy mutex
     FailureCount,           // u32 — circuit breaker failure counter
+    LastFailureReport(Address),     // u32 — ledger of this address's last report
+    ReporterFailureCount(Address),  // u32 — reports by this address this window
+    FailureReporters,               // Vec<Address> — distinct reporters this window
+    TrustedReportersOnly,           // bool — restrict reporting to trusted monitors
     Paused,                 // bool — emergency halt flag
     VaultAddress,           // Address — escrow vault contract
     RewardStream(u64),      // RewardStream — active drip stream for a task
@@ -169,6 +173,9 @@ pub enum DataKey {
 | 14 | `Locked` | Re-entrancy guard is active |
 | 15 | `ContractPaused` | Contract is paused; all state-changing calls are blocked |
 | 16 | `EscrowUnavailable` | Cross-contract call to vault/escrow reverted |
+| 38 | `ReportRateLimited` | Reporter already reported within the cooldown window |
+| 39 | `ReporterQuotaExceeded` | Reporter exhausted its per-window failure-report quota |
+| 40 | `UnauthorizedReporter` | Trusted-reporters-only mode is on and caller is untrusted |
 
 ---
 
@@ -198,29 +205,95 @@ When paused, any call to `register_task`, `vote`, `add_guardian`, `set_reputatio
 
 ### Automatic circuit breaker
 
-Off-chain monitors can report observed failures via `record_failure`. After **50 cumulative failures** the contract pauses itself automatically and emits a `cb_trip` event.
+Off-chain monitors report observed failures via `record_failure(reporter)`. The
+breaker auto-pauses the contract (and emits `cb_trip`) only when **both**
+conditions hold:
+
+* more than **50 cumulative failure reports** in the current window, **and**
+* at least **3 distinct reporters** contributed to them.
 
 ```rust
-// Called by off-chain monitor after observing a failed invocation
-client.record_failure();
+// Called by an off-chain monitor after observing a failed invocation.
+// The reporter address must sign the transaction.
+client.record_failure(&monitor_address);
+```
+
+Observability helpers:
+
+```rust
+client.get_failure_count();                  // u32 — reports in this window
+client.get_reporter_failure_count(&monitor); // u32 — reports by this address
+client.get_failure_reporters();              // Vec<Address> — distinct reporters
+client.is_trusted_reporters_only();          // bool — is gating enabled?
 ```
 
 To resume after investigation:
 
 ```rust
-// Resets the failure counter and unpauses
+// Resets the counter, clears all per-reporter accounting, and unpauses
 client.reset_circuit_breaker(&admin);
 ```
 
+#### Trust model for `record_failure` (decision record)
+
+**Decision: "permissionless but authenticated, rate-limited, and quorum-gated."**
+
+The original entry point took no arguments, required no auth, and simply bumped
+a global counter — so any single address could call it 51 times and freeze every
+guardian vote, task registration and token lock at will. Reporting remains open
+to any observer (the original design goal), but the trust the README previously
+only *implied* is now enforced on-chain by five layered controls:
+
+| # | Control | Effect |
+|---|---|---|
+| 1 | **Authenticated reporter** — `record_failure(reporter)` + `reporter.require_auth()` | Reports are attributable; anonymous bumps are impossible |
+| 2 | **Per-reporter cooldown** — `REPORT_COOLDOWN_LEDGERS = 10` | One report per address per 10 ledgers; a 51-call loop in one txn is rejected after the first call, since the ledger sequence is constant within a transaction |
+| 3 | **Per-reporter quota** — `MAX_REPORTS_PER_REPORTER = 5` | One address contributes at most 5 of the 50 required reports per window, no matter how long it waits |
+| 4 | **Distinct-reporter quorum** — `MIN_DISTINCT_REPORTERS = 3` | The breaker only trips with corroboration from independent addresses |
+| 5 | **Trusted-monitor mode** — `set_trusted_reporters_only(admin, true)` | Escape hatch: an `EmergencyManager` can restrict reporting to registered guardians and Emergency/Admin role holders if a Sybil flood is observed |
+
+Controls 3 and 4 are enforced by a compile-time assertion in
+`src/circuit_breaker.rs`:
+
+```
+MAX_REPORTS_PER_REPORTER * (MIN_DISTINCT_REPORTERS - 1) <= FAILURE_THRESHOLD
+                       5 * 2 = 10                       <= 50
+```
+
+so **no single address — and no coalition below the quorum — can ever reach the
+threshold.** Manual `pause` remains the instant, role-gated emergency stop; the
+breaker is a slow, corroborated safety net, not a lever any observer can pull
+alone.
+
+Rejected reports return a typed error: `ReportRateLimited` (38),
+`ReporterQuotaExceeded` (39), or `UnauthorizedReporter` (40).
+
+**Alternatives considered.** Restricting `record_failure` to guardians/roles was
+rejected because it discards the "any observer can report" goal and concentrates
+liveness signalling in the same set that the breaker is meant to protect against.
+Requiring a verifiable failed-invocation hash was rejected as unenforceable
+on-chain: Soroban cannot independently verify another transaction's outcome, so
+the hash would be an unchecked argument that merely raises the attacker's cost
+of generating distinct values.
+
 ### Emergency halt procedure
 
-1. **Detect** — Either trigger `pause` manually, or wait for `record_failure` to trip the breaker at >50 failures.
-2. **Verify** — Call `is_paused()` on-chain to confirm the contract is frozen.
+1. **Detect** — Either trigger `pause` manually, or wait for corroborated
+   `record_failure` reports to trip the breaker (>50 reports from ≥3 reporters).
+2. **Verify** — Call `is_paused()` on-chain to confirm the contract is frozen,
+   and `get_failure_reporters()` to see who reported.
 3. **Investigate** — Audit storage state and transaction history off-chain.
-4. **Remediate** — Deploy a patched WASM via `upgrade_contract` if needed.
-5. **Resume** — Call `reset_circuit_breaker` (resets counter + unpauses) or `unpause` if the failure counter was not the trigger.
+4. **Remediate** — Deploy a patched WASM via `upgrade_contract` if needed. If the
+   reports were spam, enable `set_trusted_reporters_only(&admin, &true)`.
+5. **Resume** — Call `reset_circuit_breaker` (resets counter, clears per-reporter
+   accounting, unpauses) or `unpause` if the failure counter was not the trigger.
 
-> **Security note:** Only the Multi-Sig admin key can call `pause`, `unpause`, and `reset_circuit_breaker`. The `record_failure` entry point is permissionless so that any observer can report failures, but it only increments a counter — it cannot directly manipulate task or guardian state.
+> **Security note:** Only `EmergencyManager` role holders can call `pause`,
+> `unpause`, `reset_circuit_breaker`, and `set_trusted_reporters_only`. The
+> `record_failure` entry point stays open to any observer, but it is
+> authenticated, rate-limited, quota-capped and quorum-gated — a single address
+> cannot pause the contract, and reports can never manipulate task or guardian
+> state.
 
 ---
 

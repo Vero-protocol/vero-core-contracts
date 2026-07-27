@@ -233,4 +233,13 @@ pub enum ContractError {
     DuplicateGuardian = 36,
     /// Storage version mismatch during pre-flight checks.
     InvalidVersion = 37,
+    /// Failure report rejected: the caller already reported within the
+    /// per-address cooldown window (`REPORT_COOLDOWN_LEDGERS`).
+    ReportRateLimited = 38,
+    /// Failure report rejected: the caller has already contributed the maximum
+    /// number of reports (`MAX_REPORTS_PER_REPORTER`) for the current breaker window.
+    ReporterQuotaExceeded = 39,
+    /// Failure report rejected: the contract is in "trusted reporters only" mode
+    /// and the caller is neither a guardian nor an EmergencyManager/Admin.
+    UnauthorizedReporter = 40,
 }

@@ -24,6 +24,24 @@ fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     (env, contract_id, admin, token_addr, client)
 }
 
+/// Trip the circuit breaker legitimately: multiple distinct authenticated
+/// reporters, each honouring the per-address cooldown and quota.
+fn trip_circuit_breaker(env: &Env, client: &VeroContractClient) {
+    let reporters: std::vec::Vec<Address> = (0..11).map(|_| Address::generate(env)).collect();
+    let mut recorded = 0;
+    'outer: for round in 0..5 {
+        env.ledger()
+            .set_sequence_number(env.ledger().sequence() + 20 * (round + 1));
+        for r in &reporters {
+            if recorded >= 51 {
+                break 'outer;
+            }
+            client.record_failure(r);
+            recorded += 1;
+        }
+    }
+}
+
 fn add_guardian_with_rep(
     env: &Env,
     client: &VeroContractClient,
@@ -903,9 +921,7 @@ fn legacy_low_weight_votes_do_not_resolve_early() {
     assert_eq!(task.votes, 5);
     assert_eq!(task.total_weight_accrued, 250);
     assert!(!task.is_done);
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
 
     let stranger = Address::generate(&env);
@@ -917,9 +933,7 @@ fn test_contract_paused_error_on_add_guardian() {
     let (env, _contract_id, admin, _token, client) = setup();
     let guardian = Address::generate(&env);
 
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
 
     assert!(client.try_add_guardian(&admin, &guardian).is_err());
@@ -1078,9 +1092,7 @@ fn test_admin_can_reset_circuit_breaker() {
     let g = add_guardian_with_rep(&env, &client, &admin, 100);
     lock_for_guardian(&env, &token, &client, &g, 101);
 
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
     assert!(client.try_vote(&g, &2).is_err());
 
@@ -1091,12 +1103,10 @@ fn test_admin_can_reset_circuit_breaker() {
 #[test]
 fn test_paused_contract_rejects_register_task() {
     let (_env, _contract_id, admin, _token, client, &1u32) = setup();
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(!client.is_paused());
 
-    client.record_failure();
+    client.record_failure(&Address::generate(&_env));
     assert!(client.is_paused());
 }
 

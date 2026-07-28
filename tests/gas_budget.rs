@@ -1,11 +1,30 @@
 #![cfg(test)]
 
+//! Tests to ensure that the actual CPU instruction budget consumption of
+//! high-traffic operations does not exceed the conservative estimates
+//! documented in `src/gas.rs`. This prevents regressions where refactoring
+//! could inadvertently push real costs above the hand-estimated limits,
+//! causing callers using `get_estimated_cost` to under-fund transactions.
+
 use soroban_sdk::token::StellarAssetClient as TestTokenClient;
-use soroban_sdk::{
-    testutils::Address as _,
-    Address, Env,
-};
-use vero_core_contracts::{gas::*, VeroContractClient, Role};
+use soroban_sdk::{testutils::Address as _, Address, Env, Vec};
+use vero_core_contracts::{gas::*, Role, VeroContractClient};
+
+/// Asserts that the CPU instructions consumed by the most recent contract
+/// invocation on the environment do not exceed the specified maximum cost.
+/// Note: `env.cost_estimate().budget()` resets before every top-level invocation.
+macro_rules! assert_budget_limit {
+    ($env:expr, $max_cost:expr, $op_name:expr) => {
+        let cost = $env.cost_estimate().budget().cpu_instruction_cost();
+        assert!(
+            cost <= $max_cost,
+            "{} cost ({}) exceeds documented limit ({})",
+            $op_name,
+            cost,
+            $max_cost
+        );
+    };
+}
 
 fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     let env = Env::default();
@@ -23,7 +42,8 @@ fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     client.grant_role(&admin, &admin, &Role::GuardianManager);
     client.grant_role(&admin, &admin, &Role::ConfigManager);
 
-    // Set a dummy vault address to simulate the worst-case cross-contract call path
+    // Set a dummy vault address to simulate the worst-case cross-contract call path.
+    // This is important because the cost estimates in `gas.rs` account for this.
     let vault = Address::generate(&env);
     client.set_vault_address(&admin, &vault);
 
@@ -47,14 +67,7 @@ fn test_gas_budget_register_task() {
     let (env, _, admin, _, client) = setup();
     
     client.register_task(&admin, &1u64, &1u32);
-    let cost = env.cost_estimate().budget().cpu_instruction_cost();
-    
-    assert!(
-        cost <= COST_REGISTER_TASK,
-        "register_task cost {} exceeds COST_REGISTER_TASK {}",
-        cost,
-        COST_REGISTER_TASK
-    );
+    assert_budget_limit!(env, COST_REGISTER_TASK, "register_task");
 }
 
 #[test]
@@ -65,14 +78,7 @@ fn test_gas_budget_vote() {
     client.register_task(&admin, &1u64, &1u32);
     
     client.vote(&guardian, &1u64);
-    let cost = env.cost_estimate().budget().cpu_instruction_cost();
-    
-    assert!(
-        cost <= COST_VOTE,
-        "vote cost {} exceeds COST_VOTE {}",
-        cost,
-        COST_VOTE
-    );
+    assert_budget_limit!(env, COST_VOTE, "vote");
 }
 
 #[test]
@@ -81,30 +87,14 @@ fn test_gas_budget_vote_batch() {
     let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
     client.set_weight_threshold(&admin, &500);
     
-    client.register_task(&admin, &1u64, &1u32);
-    client.register_task(&admin, &2u64, &1u32);
-    client.register_task(&admin, &3u64, &1u32);
-    client.register_task(&admin, &4u64, &1u32);
-    client.register_task(&admin, &5u64, &1u32);
-    
-    let votes = soroban_sdk::vec![
-        &env,
-        1u64,
-        2u64,
-        3u64,
-        4u64,
-        5u64,
-    ];
+    let mut votes = Vec::new(&env);
+    for task_id in 1..=5 {
+        client.register_task(&admin, &task_id, &1u32);
+        votes.push_back(task_id);
+    }
     
     client.vote_batch(&guardian, &votes);
-    let cost = env.cost_estimate().budget().cpu_instruction_cost();
-    
-    assert!(
-        cost <= COST_VOTE_BATCH,
-        "vote_batch cost {} exceeds COST_VOTE_BATCH {}",
-        cost,
-        COST_VOTE_BATCH
-    );
+    assert_budget_limit!(env, COST_VOTE_BATCH, "vote_batch");
 }
 
 #[test]
@@ -116,12 +106,5 @@ fn test_gas_budget_lock_tokens() {
     sac.mint(&guardian, &1000);
     
     client.lock_tokens(&guardian, &1000);
-    let cost = env.cost_estimate().budget().cpu_instruction_cost();
-    
-    assert!(
-        cost <= COST_LOCK_TOKENS,
-        "lock_tokens cost {} exceeds COST_LOCK_TOKENS {}",
-        cost,
-        COST_LOCK_TOKENS
-    );
+    assert_budget_limit!(env, COST_LOCK_TOKENS, "lock_tokens");
 }

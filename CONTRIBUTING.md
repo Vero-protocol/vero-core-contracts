@@ -112,6 +112,18 @@ Common types: `feat`, `fix`, `docs`, `test`, `chore`, `refactor`.
 
 ---
 
+## Description.md
+
+The repo contains a [`Description.md`](./Description.md) file at the root. It is **not** a duplicate of `README.md` — it is the plain-text project blurb consumed by the [GrantFox OSS](https://grantfox.io) grant registry for the FWC26 official campaign listing. The registry reads this file directly to populate the short project description shown on the grant-program directory page.
+
+**Rules for this file:**
+
+- Keep it to a single, unformatted paragraph (no headings, no code blocks).
+- Update it whenever the project's one-line pitch changes significantly (new feature, rename, scope change).
+- Do **not** delete it without also updating the registry configuration to point elsewhere.
+
+---
+
 ## Good First Issues
 
 New to the codebase? Look for issues labelled **`good first issue`** on the [Issues page](../../issues?q=is%3Aopen+label%3A%22good+first+issue%22).

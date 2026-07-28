@@ -46,7 +46,7 @@ fn add_guardian_with_rep(
 fn test_gas_budget_register_task() {
     let (env, _, admin, _, client) = setup();
     
-    client.register_task(&admin, &1u64, &1u32, &1u32);
+    client.register_task(&admin, &1u64, &1u32);
     let cost = env.cost_estimate().budget().cpu_instruction_cost();
     
     assert!(
@@ -62,9 +62,9 @@ fn test_gas_budget_vote() {
     let (env, _, admin, _, client) = setup();
     let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
     client.set_weight_threshold(&admin, &500);
-    client.register_task(&admin, &1u64, &1u32, &1u32);
+    client.register_task(&admin, &1u64, &1u32);
     
-    client.vote(&guardian, &1u64, &true);
+    client.vote(&guardian, &1u64);
     let cost = env.cost_estimate().budget().cpu_instruction_cost();
     
     assert!(
@@ -81,19 +81,19 @@ fn test_gas_budget_vote_batch() {
     let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
     client.set_weight_threshold(&admin, &500);
     
-    client.register_task(&admin, &1u64, &1u32, &1u32);
-    client.register_task(&admin, &2u64, &1u32, &1u32);
-    client.register_task(&admin, &3u64, &1u32, &1u32);
-    client.register_task(&admin, &4u64, &1u32, &1u32);
-    client.register_task(&admin, &5u64, &1u32, &1u32);
+    client.register_task(&admin, &1u64, &1u32);
+    client.register_task(&admin, &2u64, &1u32);
+    client.register_task(&admin, &3u64, &1u32);
+    client.register_task(&admin, &4u64, &1u32);
+    client.register_task(&admin, &5u64, &1u32);
     
     let votes = soroban_sdk::vec![
         &env,
-        (1u64, true),
-        (2u64, true),
-        (3u64, true),
-        (4u64, true),
-        (5u64, true),
+        1u64,
+        2u64,
+        3u64,
+        4u64,
+        5u64,
     ];
     
     client.vote_batch(&guardian, &votes);

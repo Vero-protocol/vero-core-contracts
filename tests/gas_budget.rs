@@ -105,11 +105,11 @@ fn test_gas_budget_lock_tokens() {
     // Set a fee and treasury to hit the worst-case cross-contract call path
     let treasury = Address::generate(&env);
     client.set_treasury_address(&admin, &treasury);
-    client.set_fee_bps(&admin, &1000); // 10% fee
+    client.set_fee_bps(&admin, &1000u32); // 10% fee
     
     let sac = TestTokenClient::new(&env, &token);
-    sac.mint(&guardian, &1000);
+    sac.mint(&guardian, &1000i128);
     
-    client.lock_tokens(&guardian, &1000);
+    client.lock_tokens(&guardian, &1000i128);
     assert_budget_limit!(env, COST_LOCK_TOKENS, "lock_tokens");
 }

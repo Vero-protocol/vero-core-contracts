@@ -131,19 +131,40 @@ All state lives in **instance storage** — scoped to the contract instance and 
 
 ```rust
 pub enum DataKey {
-    Guardian(Address),      // bool — is this address a guardian?
-    Reputation(Address),    // u64 — reputation score
-    Task(u64),              // Task struct
-    Voted(u64, Address),    // bool — has this guardian voted on this task?
-    WeightThreshold,        // u64 — cumulative weight required to resolve
-    TokenAddress,           // Address — locked token contract
-    LockThreshold,          // i128 — minimum locked balance to vote
-    LockedBalance(Address), // i128 — tokens locked by a guardian
-    Lock,                   // re-entrancy mutex
-    FailureCount,           // u32 — circuit breaker failure counter
-    Paused,                 // bool — emergency halt flag
-    VaultAddress,           // Address — escrow vault contract
-    RewardStream(u64),      // RewardStream — active drip stream for a task
+    Guardian(Address),             // bool — is this address a guardian?
+    Reputation(Address),           // u64 — reputation score
+    WeightThreshold,               // u64 — cumulative weight required to resolve
+    Task(u64),                     // Task — the live (active) task entry
+    Voted(u64, Address),           // bool — has this guardian voted on this task?
+    TaskVoters(u64),               // Vec<Address> — guardians who voted on this task
+    Admin,                         // Address — the multi-sig admin account
+    RoleAssignment(Address, Role), // bool — does this address hold this RBAC role?
+    DripsAddress,                  // Address — the Drips protocol contract
+    VaultAddress,                  // Address — escrow vault contract
+    RewardStream(u64),             // RewardStream — active drip stream for a task
+    TokenAddress,                  // Address — locked token contract
+    LockThreshold,                 // i128 — minimum locked balance to vote
+    LockedBalance(Address),        // i128 — tokens locked by a guardian
+    Lock,                          // re-entrancy mutex
+    FailureCount,                  // u32 — circuit breaker failure counter
+    Paused,                        // bool — emergency halt flag
+    AllGuardians,                  // Vec<Address> — index of every registered guardian
+    AllTasks,                      // Vec<u64> — index of every task id tracked by the contract
+    AllVotes,                      // reserved — superseded by the TaskVoters(u64) index, not currently written
+    AllRewardStreams,              // Vec<u64> — index of task ids with an active reward stream
+    Snapshot(u64),                 // Snapshot — recorded contract state at a given timestamp
+    AllSnapshots,                  // Vec<u64> — index of recorded snapshot timestamps
+    ActiveTask(u64),               // reserved — active tasks are stored under Task(u64), not currently written
+    ArchivedTask(u64),             // Task — archived copy of a resolved, stale task
+    Initialized,                   // bool — has the contract's constructor already run?
+    WithdrawalTimelock(Address),   // u64 — timestamp a guardian's token unlock was requested
+    UpgradeSigners,                // Vec<Address> — addresses authorized to approve contract upgrades
+    UpgradeThreshold,              // u32 — number of signer approvals required to execute an upgrade
+    PendingUpgradeWasm,            // BytesN<32> — hash of the WASM proposed for the pending upgrade
+    PendingUpgradeApprovals,       // Vec<Address> — signers who have approved the pending upgrade
+    StorageVersion,                // u32 — schema version of on-chain storage, used by migrations
+    FeeBps,                        // u32 — protocol fee in basis points
+    TreasuryAddress,               // Address — destination for collected protocol fees
 }
 ```
 

@@ -102,6 +102,11 @@ fn test_gas_budget_lock_tokens() {
     let (env, _, admin, token, client) = setup();
     let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
     
+    // Set a fee and treasury to hit the worst-case cross-contract call path
+    let treasury = Address::generate(&env);
+    client.set_treasury_address(&admin, &treasury);
+    client.set_fee_bps(&admin, &1000); // 10% fee
+    
     let sac = TestTokenClient::new(&env, &token);
     sac.mint(&guardian, &1000);
     

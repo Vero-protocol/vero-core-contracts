@@ -1,10 +1,35 @@
-use crate::types::{ContractError, DataKey, Snapshot};
+use crate::types::{
+    ContractError, DataKey, GuardianEntry, RewardStream, Snapshot, SnapshotMeta, Task,
+};
 use crate::DEFAULT_WEIGHT_THRESHOLD;
 use crate::{
     circuit_breaker, drips, events, guardian, reentrancy, reputation, storage, task, timelock,
     vault,
 };
 use soroban_sdk::{Address, Env, Map, Vec};
+
+/// Maximum number of entries `get_snapshot`/`record_snapshot` will read from
+/// any single tracked collection (guardians, tasks, reward streams) before
+/// refusing to build a snapshot.
+///
+/// Building a full snapshot costs roughly 2 storage reads per guardian
+/// (guardian flag + reputation), 2+ reads per task (task struct + its voter
+/// list), and 2 reads per reward stream. At `MAX_SNAPSHOT_COLLECTION_SIZE`
+/// entries per collection that stays comfortably inside Soroban's
+/// per-transaction CPU instruction budget with wide margin — see the
+/// growth-curve measurements in `tests/snapshot_scaling.rs`. Once a
+/// collection approaches this ceiling, callers should switch to the
+/// paginated API (`get_snapshot_meta` + `get_guardians_page` +
+/// `get_tasks_page` + `get_reward_streams_page`), which reads at most
+/// `O(limit)` entries per call — not `O(total collection size)` — and stays
+/// cheaply invokable well past the point this cap would refuse to build a
+/// full snapshot.
+pub(crate) const MAX_SNAPSHOT_COLLECTION_SIZE: u32 = 200;
+
+/// Maximum number of entries any paginated snapshot call will return,
+/// regardless of the caller-requested `limit`. Keeps a single page call's
+/// cost bounded even against a hostile/misconfigured caller.
+pub(crate) const MAX_PAGE_LIMIT: u32 = 50;
 
 pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
@@ -410,7 +435,7 @@ pub(crate) fn process_vote_batch(
     Ok(())
 }
 
-pub(crate) fn get_snapshot(env: &Env) -> Snapshot {
+pub(crate) fn get_snapshot(env: &Env) -> Result<Snapshot, ContractError> {
     let timestamp = env.ledger().timestamp();
     let paused = env
         .storage()
@@ -431,8 +456,23 @@ pub(crate) fn get_snapshot(env: &Env) -> Snapshot {
     let vault_address = env.storage().instance().get(&DataKey::VaultAddress);
     let drips_address = env.storage().instance().get(&DataKey::DripsAddress);
 
-    let mut guardians = Map::new(env);
     let all_guardians = guardian::get_all_guardians(env);
+    let all_tasks = task::get_all_tasks(env);
+    let all_streams = drips::get_all_reward_streams(env);
+
+    // Bail out before doing any of the expensive per-entry work below: once a
+    // collection outgrows the ledger's practical per-transaction CPU budget,
+    // building the full snapshot atomically is no longer safe. Callers past
+    // this point should use the paginated API instead (see
+    // `MAX_SNAPSHOT_COLLECTION_SIZE`).
+    if all_guardians.len() > MAX_SNAPSHOT_COLLECTION_SIZE
+        || all_tasks.len() > MAX_SNAPSHOT_COLLECTION_SIZE
+        || all_streams.len() > MAX_SNAPSHOT_COLLECTION_SIZE
+    {
+        return Err(ContractError::SnapshotTooLarge);
+    }
+
+    let mut guardians = Map::new(env);
     for g in all_guardians.iter() {
         guardians.set(g.clone(), guardian::is_guardian(env, &g));
     }
@@ -445,7 +485,6 @@ pub(crate) fn get_snapshot(env: &Env) -> Snapshot {
     }
 
     let mut tasks = Map::new(env);
-    let all_tasks = task::get_all_tasks(env);
     for t in all_tasks.iter() {
         if let Some(task) = task::get_task(env, t) {
             tasks.set(t, task);
@@ -453,8 +492,7 @@ pub(crate) fn get_snapshot(env: &Env) -> Snapshot {
     }
 
     let mut votes = Map::new(env);
-    let all_task_ids = task::get_all_tasks(env);
-    for t in all_task_ids.iter() {
+    for t in all_tasks.iter() {
         let task_id = t;
         let task_voters = storage::get_task_voters(env, task_id);
         for voter in task_voters.iter() {
@@ -463,14 +501,13 @@ pub(crate) fn get_snapshot(env: &Env) -> Snapshot {
     }
 
     let mut reward_streams = Map::new(env);
-    let all_streams = drips::get_all_reward_streams(env);
     for s in all_streams.iter() {
         if let Some(stream) = drips::get_reward_stream(env, s) {
             reward_streams.set(s, stream);
         }
     }
 
-    Snapshot {
+    Ok(Snapshot {
         timestamp,
         paused,
         failure_count,
@@ -483,11 +520,143 @@ pub(crate) fn get_snapshot(env: &Env) -> Snapshot {
         tasks,
         votes,
         reward_streams,
+    })
+}
+
+/// O(1) snapshot header (plus collection counts). Always safe to call,
+/// regardless of total protocol size.
+pub(crate) fn get_snapshot_meta(env: &Env) -> SnapshotMeta {
+    SnapshotMeta {
+        timestamp: env.ledger().timestamp(),
+        paused: env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false),
+        failure_count: env
+            .storage()
+            .instance()
+            .get(&DataKey::FailureCount)
+            .unwrap_or(0),
+        weight_threshold: env
+            .storage()
+            .instance()
+            .get(&DataKey::WeightThreshold)
+            .unwrap_or(DEFAULT_WEIGHT_THRESHOLD),
+        admin: env.storage().instance().get(&DataKey::Admin),
+        vault_address: env.storage().instance().get(&DataKey::VaultAddress),
+        drips_address: env.storage().instance().get(&DataKey::DripsAddress),
+        guardian_count: env
+            .storage()
+            .instance()
+            .get(&DataKey::GuardianIndexCount)
+            .unwrap_or(0),
+        task_count: env
+            .storage()
+            .instance()
+            .get(&DataKey::TaskIndexCount)
+            .unwrap_or(0),
+        reward_stream_count: drips::get_all_reward_streams(env).len(),
     }
 }
 
+/// Returns up to `limit` (capped at `MAX_PAGE_LIMIT`) guardians starting at
+/// `offset`, with their guardian status and reputation.
+///
+/// Reads the dense `GuardianIndexAt` slot index maintained by
+/// `add_guardian`/`remove_guardian` rather than the full `AllGuardians`
+/// list, so this does `O(limit)` storage reads — not `O(total guardian
+/// count)` — and stays cheaply invokable at guardian counts where
+/// `get_snapshot` is capped out entirely (see `MAX_SNAPSHOT_COLLECTION_SIZE`
+/// and `tests/snapshot_scaling.rs`). Its absolute cost still carries a mild
+/// dependency on total instance-storage size, an inherent property of
+/// Soroban's shared-instance-ledger-entry storage model.
+pub(crate) fn get_guardians_page(env: &Env, offset: u32, limit: u32) -> Vec<GuardianEntry> {
+    let limit = limit.min(MAX_PAGE_LIMIT);
+    let count: u32 = env
+        .storage()
+        .instance()
+        .get(&DataKey::GuardianIndexCount)
+        .unwrap_or(0);
+    let end = offset.saturating_add(limit).min(count);
+
+    let mut page = Vec::new(env);
+    let mut i = offset;
+    while i < end {
+        if let Some(g) = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&DataKey::GuardianIndexAt(i))
+        {
+            let is_g = guardian::is_guardian(env, &g);
+            let reputation = reputation::get_reputation(env, &g);
+            page.push_back(GuardianEntry {
+                address: g,
+                is_guardian: is_g,
+                reputation,
+            });
+        }
+        i += 1;
+    }
+    page
+}
+
+/// Returns up to `limit` (capped at `MAX_PAGE_LIMIT`) tasks starting at
+/// `offset`.
+///
+/// Reads the dense `TaskIndexAt` slot index maintained by
+/// `register_tasks`/`purge_task` rather than the full `AllTasks` list, so
+/// this does `O(limit)` storage reads — not `O(total task count)` — and
+/// stays cheaply invokable at task counts where `get_snapshot` is capped out
+/// entirely. See `get_guardians_page` for the same caveat on absolute cost
+/// under Soroban's shared-instance-ledger-entry storage model.
+pub(crate) fn get_tasks_page(env: &Env, offset: u32, limit: u32) -> Vec<Task> {
+    let limit = limit.min(MAX_PAGE_LIMIT);
+    let count: u32 = env
+        .storage()
+        .instance()
+        .get(&DataKey::TaskIndexCount)
+        .unwrap_or(0);
+    let end = offset.saturating_add(limit).min(count);
+
+    let mut page = Vec::new(env);
+    let mut i = offset;
+    while i < end {
+        if let Some(id) = env
+            .storage()
+            .instance()
+            .get::<_, u64>(&DataKey::TaskIndexAt(i))
+        {
+            if let Some(t) = task::get_task(env, id) {
+                page.push_back(t);
+            }
+        }
+        i += 1;
+    }
+    page
+}
+
+/// Returns up to `limit` (capped at `MAX_PAGE_LIMIT`) reward streams starting
+/// at `offset`.
+pub(crate) fn get_reward_streams_page(env: &Env, offset: u32, limit: u32) -> Vec<RewardStream> {
+    let limit = limit.min(MAX_PAGE_LIMIT);
+    let all = drips::get_all_reward_streams(env);
+    let end = offset.saturating_add(limit).min(all.len());
+
+    let mut page = Vec::new(env);
+    let mut i = offset;
+    while i < end {
+        let id = all.get(i).unwrap();
+        if let Some(s) = drips::get_reward_stream(env, id) {
+            page.push_back(s);
+        }
+        i += 1;
+    }
+    page
+}
+
 pub(crate) fn record_snapshot(env: &Env) -> Result<(), ContractError> {
-    let snapshot = get_snapshot(env);
+    let snapshot = get_snapshot(env)?;
     let timestamp = snapshot.timestamp;
 
     let mut all_snapshots: soroban_sdk::Vec<u64> = env

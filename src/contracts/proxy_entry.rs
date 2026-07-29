@@ -2,7 +2,9 @@
 
 use crate::contracts::logic;
 use crate::contracts::validate_address;
-use crate::types::{BatchCall, ContractError, DataKey, RewardStream, Snapshot};
+use crate::types::{
+    BatchCall, ContractError, DataKey, GuardianEntry, RewardStream, Snapshot, SnapshotMeta, Task,
+};
 use crate::DEFAULT_WEIGHT_THRESHOLD;
 use crate::{circuit_breaker, drips, events, guardian, reputation, storage, task};
 use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, Vec};
@@ -316,8 +318,18 @@ impl VeroContract {
         task::get_task(&env, task_id)
     }
 
-    pub fn archive_task(env: Env, task_id: u64) -> Result<(), ContractError> {
+    /// Archives a resolved, stale task, moving it from active to archived storage.
+    ///
+    /// Requires the `TaskManager` role. This was previously permissionless;
+    /// however, `start_drips_stream` only resolves tasks from active storage
+    /// (no archived-storage fallback), so an unauthorized early archive could
+    /// permanently block a task's reward stream from ever starting. Gating
+    /// this behind `TaskManager`, consistent with `cancel_task`/`purge_task`,
+    /// prevents that griefing vector.
+    pub fn archive_task(env: Env, admin: Address, task_id: u64) -> Result<(), ContractError> {
+        validate_address(&env, &admin)?;
         circuit_breaker::require_not_paused(&env)?;
+        crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::TaskManager)?;
         storage::archive_task(&env, task_id)?;
         events::emit_task_archived(&env, task_id);
         Ok(())
@@ -670,13 +682,43 @@ impl VeroContract {
         Ok(())
     }
 
-    pub fn get_snapshot(env: Env) -> Snapshot {
+    /// Builds the full contract snapshot atomically. Reverts with
+    /// `SnapshotTooLarge` once any tracked collection (guardians, tasks,
+    /// reward streams) exceeds `MAX_SNAPSHOT_COLLECTION_SIZE` — at that point
+    /// use `get_snapshot_meta` plus the paginated `*_page` calls instead.
+    pub fn get_snapshot(env: Env) -> Result<Snapshot, ContractError> {
         logic::get_snapshot(&env)
     }
 
     pub fn record_snapshot(env: Env) -> Result<(), ContractError> {
         circuit_breaker::require_not_paused(&env)?;
         logic::record_snapshot(&env)
+    }
+
+    /// O(1) snapshot header (paused/admin/thresholds/addresses) plus the
+    /// current guardian/task/reward-stream counts. Always safe to call.
+    pub fn get_snapshot_meta(env: Env) -> SnapshotMeta {
+        logic::get_snapshot_meta(&env)
+    }
+
+    /// Returns a bounded page of guardians (with status + reputation)
+    /// starting at `offset`. `limit` is capped server-side regardless of the
+    /// value passed in. Reads `O(limit)` entries, not `O(total guardian
+    /// count)` — stays cheaply invokable at guardian counts where
+    /// `get_snapshot` is capped out entirely.
+    pub fn get_guardians_page(env: Env, offset: u32, limit: u32) -> Vec<GuardianEntry> {
+        logic::get_guardians_page(&env, offset, limit)
+    }
+
+    /// Returns a bounded page of tasks starting at `offset`. Reads `O(limit)`
+    /// entries, not `O(total task count)`.
+    pub fn get_tasks_page(env: Env, offset: u32, limit: u32) -> Vec<Task> {
+        logic::get_tasks_page(&env, offset, limit)
+    }
+
+    /// Returns a bounded page of reward streams starting at `offset`.
+    pub fn get_reward_streams_page(env: Env, offset: u32, limit: u32) -> Vec<RewardStream> {
+        logic::get_reward_streams_page(&env, offset, limit)
     }
 
     pub fn get_snapshot_history(env: Env) -> soroban_sdk::Vec<u64> {

@@ -81,6 +81,48 @@ pub struct RewardStream {
     pub active: bool,
 }
 
+/// O(1) snapshot header — safe to call regardless of how many guardians,
+/// tasks, or reward streams the protocol has accumulated. Use this plus
+/// `get_guardians_page` / `get_tasks_page` / `get_reward_streams_page` to
+/// reconstruct full state in bounded chunks when the collections are too
+/// large for the atomic `get_snapshot`.
+#[contracttype]
+#[derive(Clone)]
+pub struct SnapshotMeta {
+    /// Timestamp when the snapshot header was read.
+    pub timestamp: u64,
+    /// Whether the contract was paused.
+    pub paused: bool,
+    /// Number of failures recorded in the circuit breaker.
+    pub failure_count: u32,
+    /// The weight threshold required to resolve a task.
+    pub weight_threshold: u64,
+    /// The admin address, if set.
+    pub admin: Option<Address>,
+    /// The vault address, if set.
+    pub vault_address: Option<Address>,
+    /// The drips contract address, if set.
+    pub drips_address: Option<Address>,
+    /// Total number of registered guardians.
+    pub guardian_count: u32,
+    /// Total number of tracked tasks.
+    pub task_count: u32,
+    /// Total number of tracked reward streams.
+    pub reward_stream_count: u32,
+}
+
+/// A single page entry returned by `get_guardians_page`.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GuardianEntry {
+    /// The guardian's address.
+    pub address: Address,
+    /// Whether the address is currently a registered guardian.
+    pub is_guardian: bool,
+    /// The guardian's reputation score, if one has been set.
+    pub reputation: Option<u64>,
+}
+
 /// A snapshot of the contract state at a specific point in time.
 #[contracttype]
 #[derive(Clone)]
@@ -233,4 +275,10 @@ pub enum ContractError {
     DuplicateGuardian = 36,
     /// Storage version mismatch during pre-flight checks.
     InvalidVersion = 37,
+    /// The atomic `get_snapshot`/`record_snapshot` refused to run because a
+    /// tracked collection (guardians, tasks, or reward streams) exceeds
+    /// `MAX_SNAPSHOT_COLLECTION_SIZE`. Use the paginated snapshot API
+    /// (`get_snapshot_meta`, `get_guardians_page`, `get_tasks_page`,
+    /// `get_reward_streams_page`) instead.
+    SnapshotTooLarge = 38,
 }

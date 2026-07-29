@@ -36,7 +36,10 @@ pub use contracts::rbac::{grant_role_internal, has_role, require_role, revoke_ro
 pub use drips::{get_reward_stream, start_drips_stream};
 pub use guardian::{add_guardian, get_all_guardians, is_guardian};
 pub use task::{get_task, register_tasks};
-pub use types::{BatchCall, ContractError, DataKey, Operation, Role};
+pub use types::{
+    BatchCall, ContractError, DataKey, GuardianEntry, Operation, RewardStream, Role, Snapshot,
+    SnapshotMeta, Task,
+};
 
 /// Default weight threshold: a task requires at least 300 cumulative
 /// reputation weight to be resolved. This can be overridden by the

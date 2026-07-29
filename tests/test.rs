@@ -774,18 +774,18 @@ fn archive_timestamp_underflow_is_safely_rejected_without_mutation() {
     assert_eq!(client.get_task(&61).unwrap().resolved_at, 1_000);
 
     env.ledger().set_timestamp(0);
-    assert!(client.try_archive_task(&61).is_err());
+    assert!(client.try_archive_task(&admin, &61).is_err());
     assert!(client.get_task(&61).is_some());
     assert!(client.get_archived_task(&61).is_none());
 
     env.ledger().set_timestamp(1_000 + ARCHIVE_AFTER_SECONDS);
-    assert!(client.try_archive_task(&61).is_err());
+    assert!(client.try_archive_task(&admin, &61).is_err());
     assert!(client.get_task(&61).is_some());
     assert!(client.get_archived_task(&61).is_none());
 
     env.ledger()
         .set_timestamp(1_000 + ARCHIVE_AFTER_SECONDS + 1);
-    client.archive_task(&61);
+    client.archive_task(&admin, &61);
     assert!(client.get_task(&61).is_none());
     assert!(client.get_archived_task(&61).is_some());
 }
@@ -1362,6 +1362,27 @@ fn test_non_admin_cannot_purge_task() {
 }
 
 #[test]
+fn test_non_taskmanager_cannot_archive_task() {
+    let (env, _contract_id, admin, token, client) = setup();
+    client.set_weight_threshold(&admin, &1);
+    let guardian = add_guardian_with_rep(&env, &client, &admin, 1);
+    client.register_task(&admin, &70u64, &1u32, &1u32);
+    lock_for_guardian(&env, &token, &client, &guardian, 101);
+    env.ledger().set_timestamp(1_000);
+    client.vote(&guardian, &70u64);
+    env.ledger()
+        .set_timestamp(1_000 + ARCHIVE_AFTER_SECONDS + 1);
+
+    let stranger = Address::generate(&env);
+    let result = client.try_archive_task(&stranger, &70u64);
+    assert!(result.is_err());
+
+    // Task must remain active, not archived
+    assert!(client.get_task(&70u64).is_some());
+    assert!(client.get_archived_task(&70u64).is_none());
+}
+
+#[test]
 fn test_purge_archived_task_removes_storage() {
     let (env, _contract_id, admin, token, client) = setup();
     client.set_weight_threshold(&admin, &300u64);
@@ -1378,7 +1399,7 @@ fn test_purge_archived_task_removes_storage() {
     let resolved = client.get_task(&40u64).unwrap().resolved_at;
     let thirty_days_plus_one: u64 = 30 * 24 * 60 * 60 + 1;
     env.ledger().set_timestamp(resolved + thirty_days_plus_one);
-    client.archive_task(&40u64);
+    client.archive_task(&admin, &40u64);
 
     // Task must be archived
     assert!(client.get_archived_task(&40u64).is_some());

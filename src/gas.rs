@@ -86,6 +86,11 @@ pub const COST_UPGRADE_CONTRACT: u64 = 2_500_000;
 
 /// `record_snapshot`: base + get_snapshot reads + 2 writes (AllSnapshots + Snapshot) + event.
 /// `500_000 + 20*50_000 + 2*150_000 + 30_000`
+///
+/// This is a fixed estimate for a small/typical guardian+task count. Once any
+/// collection nears `logic::MAX_SNAPSHOT_COLLECTION_SIZE`, `record_snapshot`
+/// costs scale with collection size (and above the cap it reverts with
+/// `SnapshotTooLarge` rather than exceeding the ledger's instruction budget).
 pub const COST_RECORD_SNAPSHOT: u64 = 1_830_000;
 
 /// `purge_task`: base + 2 task reads + AllTasks read + per-voter Voted removes (avg 5) +

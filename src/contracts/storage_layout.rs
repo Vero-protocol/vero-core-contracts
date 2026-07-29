@@ -55,4 +55,22 @@ pub enum DataKey {
     StorageVersion,
     FeeBps,
     TreasuryAddress,
+    /// Dense slot-indexed guardian list (slot -> address), maintained
+    /// alongside `AllGuardians` via swap-remove so `get_guardians_page` can
+    /// read a bounded page of slots without fetching the whole guardian set.
+    GuardianIndexAt(u32),
+    /// Reverse lookup (address -> current slot) used to support O(1)
+    /// swap-remove from the guardian index on `remove_guardian`.
+    GuardianIndexOf(Address),
+    /// Number of occupied guardian index slots.
+    GuardianIndexCount,
+    /// Dense slot-indexed task list (slot -> task id), maintained alongside
+    /// `AllTasks` via swap-remove so `get_tasks_page` can read a bounded
+    /// page of slots without fetching the whole task set.
+    TaskIndexAt(u32),
+    /// Reverse lookup (task id -> current slot) used to support O(1)
+    /// swap-remove from the task index on `purge_task`.
+    TaskIndexOf(u64),
+    /// Number of occupied task index slots.
+    TaskIndexCount,
 }

@@ -1,10 +1,9 @@
 #![cfg(test)]
 
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
-use vero_core_contracts::{ContractError, Role, VeroContractClient};
-
-const LOCK_THRESHOLD: i128 = 100;
-const ZERO_ADDRESS_STR: &str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+use vero_core_contracts::{
+    ContractError, Role, VeroContractClient, ZERO_ADDRESS_STR,
+};
 
 fn zero_address(env: &Env) -> Address {
     Address::from_string(&String::from_str(env, ZERO_ADDRESS_STR))

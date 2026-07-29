@@ -45,18 +45,18 @@ On-chain GitHub PR verification for the Stellar ecosystem. Guardians — trusted
 
 ## Modules
 
-| Module | Responsibility |
-|---|---|
-| `types` | `Task`, `DataKey`, `ContractError`, `RewardStream` |
-| `guardian` | Guardian registry with TTL-extended instance storage |
-| `task` | Task registration and retrieval |
-| `reputation` | Guardian reputation scores and voting power calculation |
+| Module            | Responsibility                                                  |
+| ----------------- | --------------------------------------------------------------- |
+| `types`           | `Task`, `DataKey`, `ContractError`, `RewardStream`              |
+| `guardian`        | Guardian registry with TTL-extended instance storage            |
+| `task`            | Task registration and retrieval                                 |
+| `reputation`      | Guardian reputation scores and voting power calculation         |
 | `circuit_breaker` | Emergency halt: `require_not_paused`, `record_failure`, `reset` |
-| `reentrancy` | Mutex lock/unlock guarding `vote` and `register_task` |
-| `drips` | Cross-contract reward stream initiation via Drips protocol |
-| `vault` | Cross-contract escrow release on task resolution |
-| `events` | On-chain event emission |
-| `lib` | Public contract surface and `vote` orchestration |
+| `reentrancy`      | Mutex lock/unlock guarding `vote` and `register_task`           |
+| `drips`           | Cross-contract reward stream initiation via Drips protocol      |
+| `vault`           | Cross-contract escrow release on task resolution                |
+| `events`          | On-chain event emission                                         |
+| `lib`             | Public contract surface and `vote` orchestration                |
 
 ---
 
@@ -88,12 +88,34 @@ cargo test
 ### Initialize the contract
 
 ```rust
-client.initialize(&token_address, &100i128); // lock threshold = 100
+client.initialize(&admin, &token_address, &100i128); // lock threshold = 100
+```
+
+> **Important:** `initialize()` only grants `Role::Admin` to the admin address. Before calling any other role-gated entrypoint you must explicitly grant the required roles to the caller (typically the admin itself in single-operator deployments).
+
+### Grant management roles to the admin
+
+```rust
+// Required for add_guardian / remove_guardian / set_reputation
+client.grant_role(&admin, &admin, &Role::GuardianManager);
+
+// Required for register_task / cancel_task / purge_task
+client.grant_role(&admin, &admin, &Role::TaskManager);
+
+// Required for set_weight_threshold / set_vault_address / set_fee_bps / set_treasury_address
+client.grant_role(&admin, &admin, &Role::ConfigManager);
+
+// Required for pause / unpause / toggle_pause / reset_circuit_breaker / emergency_recover
+client.grant_role(&admin, &admin, &Role::EmergencyManager);
+
+// Required for start_reward_stream
+client.grant_role(&admin, &admin, &Role::TreasuryManager);
 ```
 
 ### Add a guardian and set reputation
 
 ```rust
+// Requires Role::GuardianManager (granted above)
 client.add_guardian(&admin, &validator_address);
 client.set_reputation(&admin, &validator_address, &300u64); // score = 300
 ```
@@ -107,7 +129,8 @@ client.lock_tokens(&guardian, &150i128); // amount > threshold
 ### Register a task
 
 ```rust
-client.register_task(&admin, &pr_number);
+// Requires Role::TaskManager (granted above). min_votes_required = minimum guardian votes before resolution.
+client.register_task(&admin, &pr_number, &1u32);
 ```
 
 ### Cast a vote
@@ -235,7 +258,7 @@ client.toggle_pause(&admin);
 let frozen: bool = client.is_paused();
 ```
 
-Both `pause` and `unpause` require `admin.require_auth()`. No other address can call them.
+Both `pause` and `unpause` require the caller to hold `Role::EmergencyManager` (granted via `grant_role`). The `admin` address can call them after being granted the EmergencyManager role in the setup steps above.
 
 When paused, any call to `register_task`, `vote`, `add_guardian`, `set_reputation`, `set_weight_threshold`, or `start_reward_stream` returns `Err(ContractError::ContractPaused)` immediately.
 
@@ -263,7 +286,7 @@ client.reset_circuit_breaker(&admin);
 4. **Remediate** — Deploy a patched WASM via `upgrade_contract` if needed.
 5. **Resume** — Call `reset_circuit_breaker` (resets counter + unpauses) or `unpause` if the failure counter was not the trigger.
 
-> **Security note:** Only the Multi-Sig admin key can call `pause`, `unpause`, and `reset_circuit_breaker`. The `record_failure` entry point is permissionless so that any observer can report failures, but it only increments a counter — it cannot directly manipulate task or guardian state.
+> **Security note:** Only addresses holding the `Role::EmergencyManager` role can call `pause`, `unpause`, and `reset_circuit_breaker`. The `grant_role` call to assign EmergencyManager itself requires `Role::Admin`, ensuring role delegation is strictly controlled. The `record_failure` entry point is permissionless so that any observer can report failures, but it only increments a counter — it cannot directly manipulate task or guardian state.
 
 ---
 

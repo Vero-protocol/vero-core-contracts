@@ -38,19 +38,19 @@ pub const COST_SET_REPUTATION: u64 = 700_000;
 
 /// `lock_tokens`:
 ///   base + paused read + auth + token read + fee_bps read + treasury read + 2x transfer + balance read + balance write + event
-///   500_000 + 5*50_000 + 2*500_000 + 50_000 + 150_000 + 30_000
-pub const COST_LOCK_TOKENS: u64 = 2_000_000;
+///   500_000 + 5*50_000 + 2*1_500_000 + 50_000 + 150_000 + 30_000
+pub const COST_LOCK_TOKENS: u64 = 5_000_000;
 
 /// `unlock_tokens`:
 ///   base + has() check + guardian read + balance read + fee read + treasury read + 2x token transfer + balance write
-///   500_000 + 50_000 + 50_000 + 50_000 + 50_000 + 50_000 + 2*500_000 + 150_000
-pub const COST_UNLOCK_TOKENS: u64 = 1_900_000;
+///   500_000 + 50_000 + 50_000 + 50_000 + 50_000 + 50_000 + 2*1_500_000 + 150_000
+pub const COST_UNLOCK_TOKENS: u64 = 5_000_000;
 
 /// `resign_guardian`:
 ///   base + has() check + guardian status write + balance read
 ///   + fee read + treasury read + 2x conditional token transfer + balance write
-///   500_000 + 50_000 + 150_000 + 50_000 + 50_000 + 50_000 + 2*500_000 + 150_000
-pub const COST_RESIGN_GUARDIAN: u64 = 2_000_000;
+///   500_000 + 50_000 + 150_000 + 50_000 + 50_000 + 50_000 + 2*1_500_000 + 150_000
+pub const COST_RESIGN_GUARDIAN: u64 = 5_000_000;
 
 /// `set_weight_threshold`: base + threshold write.
 /// `500_000 + 150_000`

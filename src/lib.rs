@@ -32,6 +32,7 @@ mod validation;
 mod vault;
 
 pub use contracts::proxy_entry::{VeroContract, VeroContractClient};
+pub use utils::address::ZERO_ADDRESS_STR;
 pub use contracts::rbac::{grant_role_internal, has_role, require_role, revoke_role_internal};
 pub use drips::{get_reward_stream, start_drips_stream};
 pub use guardian::{add_guardian, get_all_guardians, is_guardian};

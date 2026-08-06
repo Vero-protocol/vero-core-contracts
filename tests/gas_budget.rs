@@ -65,7 +65,7 @@ fn add_guardian_with_rep(
 #[test]
 fn test_gas_budget_register_task() {
     let (env, _, admin, _, client) = setup();
-    
+
     client.register_task(&admin, &1u64, &1u32);
     assert_budget_limit!(env, COST_REGISTER_TASK, "register_task");
 }
@@ -76,7 +76,7 @@ fn test_gas_budget_vote() {
     let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
     client.set_weight_threshold(&admin, &500);
     client.register_task(&admin, &1u64, &1u32);
-    
+
     client.vote(&guardian, &1u64);
     assert_budget_limit!(env, COST_VOTE, "vote");
 }
@@ -86,13 +86,13 @@ fn test_gas_budget_vote_batch() {
     let (env, _, admin, _, client) = setup();
     let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
     client.set_weight_threshold(&admin, &500);
-    
+
     let mut votes = Vec::new(&env);
     for task_id in 1..=5 {
         client.register_task(&admin, &task_id, &1u32);
         votes.push_back(task_id);
     }
-    
+
     client.vote_batch(&guardian, &votes);
     assert_budget_limit!(env, COST_VOTE_BATCH, "vote_batch");
 }
@@ -101,15 +101,15 @@ fn test_gas_budget_vote_batch() {
 fn test_gas_budget_lock_tokens() {
     let (env, _, admin, token, client) = setup();
     let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
-    
+
     // Set a fee and treasury to hit the worst-case cross-contract call path
     let treasury = Address::generate(&env);
     client.set_treasury_address(&admin, &treasury);
     client.set_fee_bps(&admin, &1000u32); // 10% fee
-    
+
     let sac = TestTokenClient::new(&env, &token);
     sac.mint(&guardian, &1000i128);
-    
+
     client.lock_tokens(&guardian, &1000i128);
     assert_budget_limit!(env, COST_LOCK_TOKENS, "lock_tokens");
 }

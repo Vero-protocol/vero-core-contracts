@@ -52,6 +52,24 @@ pub fn emit_circuit_breaker_triggered(env: &Env, failure_count: u32) {
         .publish((symbol_short!("cb_trip"),), failure_count);
 }
 
+/// Emits an event when an authenticated observer reports a failure.
+///
+/// Event topic: `"cb_report"` (failure_reported)
+/// Event data: `(reporter, new_failure_count)`
+pub fn emit_failure_reported(env: &Env, reporter: &Address, failure_count: u32) {
+    env.events()
+        .publish((symbol_short!("cb_report"),), (reporter.clone(), failure_count));
+}
+
+/// Emits an event when "trusted reporters only" mode is toggled.
+///
+/// Event topic: `"cb_trust"`
+/// Event data: `(admin, enabled)`
+pub fn emit_trusted_reporters_only_set(env: &Env, admin: &Address, enabled: bool) {
+    env.events()
+        .publish((symbol_short!("cb_trust"),), (admin.clone(), enabled));
+}
+
 pub fn emit_role_granted(env: &Env, caller: &Address, target: &Address, role: u8) {
     // Pack role into u32 for Soroban SDK compatibility
     env.events().publish(

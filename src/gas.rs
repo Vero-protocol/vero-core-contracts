@@ -69,9 +69,12 @@ pub const COST_START_REWARD_STREAM: u64 = 1_330_000;
 /// `500_000 + 50_000 + 150_000 + 30_000`
 pub const COST_TOGGLE_PAUSE: u64 = 730_000;
 
-/// `record_failure`: base + failure-count read + failure-count write + conditional paused write + event.
-/// `500_000 + 50_000 + 150_000 + 150_000 + 30_000`
-pub const COST_RECORD_FAILURE: u64 = 880_000;
+/// `record_failure(reporter)`: base + auth + trusted-mode read + cooldown read
+/// + reporter-quota read + reporter index read/write + last-report write
+/// + reporter-count write + failure-count read/write + conditional paused write
+/// + report event + conditional trip event.
+/// `500_000 + 4*50_000 + 5*150_000 + 2*30_000`
+pub const COST_RECORD_FAILURE: u64 = 1_510_000;
 
 /// `reset_circuit_breaker`: base + failure-count write + paused remove.
 /// `500_000 + 150_000 + 150_000`

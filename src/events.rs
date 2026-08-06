@@ -57,8 +57,10 @@ pub fn emit_circuit_breaker_triggered(env: &Env, failure_count: u32) {
 /// Event topic: `"cb_report"` (failure_reported)
 /// Event data: `(reporter, new_failure_count)`
 pub fn emit_failure_reported(env: &Env, reporter: &Address, failure_count: u32) {
-    env.events()
-        .publish((symbol_short!("cb_report"),), (reporter.clone(), failure_count));
+    env.events().publish(
+        (symbol_short!("cb_report"),),
+        (reporter.clone(), failure_count),
+    );
 }
 
 /// Emits an event when "trusted reporters only" mode is toggled.

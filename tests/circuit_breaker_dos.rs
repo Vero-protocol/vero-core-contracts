@@ -150,9 +150,7 @@ fn test_sub_quorum_coalition_cannot_pause_contract() {
     }
     env.budget().reset_unlimited();
 
-    assert!(
-        client.get_failure_count() <= MAX_REPORTS_PER_REPORTER * (MIN_DISTINCT_REPORTERS - 1)
-    );
+    assert!(client.get_failure_count() <= MAX_REPORTS_PER_REPORTER * (MIN_DISTINCT_REPORTERS - 1));
     assert!(client.get_failure_count() < FAILURE_THRESHOLD);
     assert!(
         !client.is_paused(),

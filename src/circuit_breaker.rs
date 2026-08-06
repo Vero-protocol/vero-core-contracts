@@ -203,9 +203,10 @@ pub fn record_failure(env: &Env, reporter: Address) -> Result<(), ContractError>
     }
 
     // 7. Commit the report.
-    env.storage()
-        .instance()
-        .set(&DataKey::LastFailureReport(reporter.clone()), &current_ledger);
+    env.storage().instance().set(
+        &DataKey::LastFailureReport(reporter.clone()),
+        &current_ledger,
+    );
     env.storage().instance().set(
         &DataKey::ReporterFailureCount(reporter.clone()),
         &reports_by_caller.saturating_add(1),

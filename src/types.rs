@@ -292,5 +292,4 @@ pub enum ContractError {
     /// (`get_snapshot_meta`, `get_guardians_page`, `get_tasks_page`,
     /// `get_reward_streams_page`) instead.
     SnapshotTooLarge = 38,
-
 }

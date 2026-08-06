@@ -1,6 +1,9 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::{Address as _, Ledger as _}, Address, Env};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger as _},
+    Address, Env,
+};
 use vero_core_contracts::{Role, VeroContractClient};
 
 const LOCK_THRESHOLD: i128 = 100;
@@ -37,7 +40,8 @@ fn trip_circuit_breaker(env: &Env, client: &VeroContractClient) {
     let reporters: std::vec::Vec<Address> = (0..11).map(|_| Address::generate(env)).collect();
     let mut recorded = 0;
     'outer: for round in 0..5 {
-        env.ledger().set_sequence_number(env.ledger().sequence() + 20 * (round + 1));
+        env.ledger()
+            .set_sequence_number(env.ledger().sequence() + 20 * (round + 1));
         for r in &reporters {
             if recorded >= 51 {
                 break 'outer;
@@ -552,10 +556,8 @@ fn test_emergency_recover_bypasses_circuit_breaker_trip() {
     let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
     token_admin_client.mint(&client.address, &1000);
 
-    // Trip the circuit breaker automatically via 51 failures
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    // Trip the circuit breaker via distinct, authenticated reporters.
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
 
     // Emergency recover should succeed when circuit breaker is tripped

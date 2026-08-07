@@ -47,8 +47,7 @@ pub const COST_LOCK_TOKENS: u64 = 5_000_000;
 pub const COST_UNLOCK_TOKENS: u64 = 5_000_000;
 
 /// `resign_guardian`:
-///   base + has() check + guardian status write + balance read
-///   + fee read + treasury read + 2x conditional token transfer + balance write
+///   base + has() check + guardian status write + balance read + fee read + treasury read + 2x conditional token transfer + balance write
 ///   500_000 + 50_000 + 150_000 + 50_000 + 50_000 + 50_000 + 2*1_500_000 + 150_000
 pub const COST_RESIGN_GUARDIAN: u64 = 5_000_000;
 

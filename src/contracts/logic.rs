@@ -282,8 +282,10 @@ pub(crate) fn process_vote(
         .get(&DataKey::WeightThreshold)
         .unwrap_or(DEFAULT_WEIGHT_THRESHOLD);
 
-    // Delegate to the Kani-verified consensus module so the on-chain vote
-    // path is exactly the logic proved by the harnesses in `verification/`.
+    // Keep this transition delegated to the Kani-verified consensus module.
+    // Reimplementing it here could make the on-chain path diverge from the
+    // arithmetic proved in `verification/`; see
+    // [VERIFICATION_REPORT.md](../../VERIFICATION_REPORT.md).
     let mut consensus_state = crate::consensus::ConsensusState {
         total_weight_accrued: t.total_weight_accrued,
         votes: t.votes,
@@ -352,8 +354,10 @@ pub(crate) fn vote_inner(
         .get(&DataKey::WeightThreshold)
         .unwrap_or(DEFAULT_WEIGHT_THRESHOLD);
 
-    // Delegate to the Kani-verified consensus module so the on-chain vote
-    // path is exactly the logic proved by the harnesses in `verification/`.
+    // Keep this transition delegated to the Kani-verified consensus module.
+    // Reimplementing it here could make the on-chain path diverge from the
+    // arithmetic proved in `verification/`; see
+    // [VERIFICATION_REPORT.md](../../VERIFICATION_REPORT.md).
     let mut consensus_state = crate::consensus::ConsensusState {
         total_weight_accrued: t.total_weight_accrued,
         votes: t.votes,

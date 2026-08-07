@@ -8,6 +8,26 @@ use crate::{
 };
 use soroban_sdk::{Address, Env, Map, Vec};
 
+/// Attempts to release funds from the vault. If the vault call fails, the failure
+/// is logged via an event but does not revert the transaction. This ensures task
+/// resolution is not blocked by a broken vault.
+pub(crate) fn try_release_vault_funds(env: &Env, task_id: u64, vault_addr: &Address) {
+    // Use the generated try_release_funds method from VaultClient
+    // This will not panic on failure - it returns a Result
+    let vault_client = vault::VaultClient::new(env, vault_addr);
+    let result = vault_client.try_release_funds(&task_id);
+
+    match result {
+        Ok(_) => {
+            events::emit_vault_release_success(env, task_id);
+        }
+        Err(_e) => {
+            // Vault failure is logged but does not revert the transaction
+            events::emit_vault_release_failed(env, task_id);
+        }
+    }
+}
+
 /// Maximum number of entries `get_snapshot`/`record_snapshot` will read from
 /// any single tracked collection (guardians, tasks, reward streams) before
 /// refusing to build a snapshot.
@@ -289,8 +309,7 @@ pub(crate) fn process_vote(
             .instance()
             .get::<_, Address>(&DataKey::VaultAddress)
         {
-            let vault_client = vault::VaultClient::new(env, &vault_addr);
-            vault_client.release_funds(&task_id);
+            try_release_vault_funds(env, task_id, &vault_addr);
         }
     }
 
@@ -359,8 +378,7 @@ pub(crate) fn vote_inner(
             .instance()
             .get::<_, Address>(&DataKey::VaultAddress)
         {
-            let vault_client = vault::VaultClient::new(env, &vault_addr);
-            vault_client.release_funds(&task_id);
+            try_release_vault_funds(env, task_id, &vault_addr);
         }
     }
 

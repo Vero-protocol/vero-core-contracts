@@ -41,6 +41,7 @@ fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     client.initialize(&admin, &token_addr, &0i128);
     client.grant_role(&admin, &admin, &Role::GuardianManager);
     client.grant_role(&admin, &admin, &Role::ConfigManager);
+    client.grant_role(&admin, &admin, &Role::TaskManager);
 
     // Set a dummy vault address to simulate the worst-case cross-contract call path.
     // This is important because the cost estimates in `gas.rs` account for this.

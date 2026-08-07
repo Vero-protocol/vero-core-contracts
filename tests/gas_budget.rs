@@ -12,10 +12,10 @@ use vero_core_contracts::{gas::*, Role, VeroContractClient};
 
 /// Asserts that the CPU instructions consumed by the most recent contract
 /// invocation on the environment do not exceed the specified maximum cost.
-/// Note: `env.cost_estimate().budget()` resets before every top-level invocation.
+/// Note: `env.budget()` resets before every top-level invocation.
 macro_rules! assert_budget_limit {
     ($env:expr, $max_cost:expr, $op_name:expr) => {
-        let cost = $env.cost_estimate().budget().cpu_instruction_cost();
+        let cost = $env.budget().cpu_instruction_cost();
         assert!(
             cost <= $max_cost,
             "{} cost ({}) exceeds documented limit ({})",

@@ -18,7 +18,8 @@ mod drips;
 /// Contract event emitters.
 pub mod events;
 
-mod gas;
+/// Instruction-cost estimates for public entry points.
+pub mod gas;
 mod guardian;
 mod migrate;
 mod reentrancy;

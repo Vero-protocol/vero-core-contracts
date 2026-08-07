@@ -1633,3 +1633,42 @@ fn test_dynamic_min_votes_unresolved_at_four_of_five() {
     assert_eq!(task.votes, 5);
     assert!(task.is_done, "task must resolve once 5 votes are cast");
 }
+
+/// Test that task resolution succeeds even when the vault call fails.
+/// This verifies the fault isolation fix for issue #134.
+#[test]
+fn test_task_resolves_when_vault_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Use the contract itself as a "failing vault" by setting it as the vault
+    // and not implementing release_funds properly
+    let (env, contract_id, admin, token_addr, client) = setup();
+
+    // Set the vault to the contract itself (which doesn't implement release_funds)
+    client.set_vault_address(&admin, &contract_id);
+
+    // Add a guardian with reputation
+    let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
+
+    // Set weight threshold to 300
+    client.set_weight_threshold(&admin, &300u64);
+
+    // Register a task
+    client.register_task(&admin, &1u64);
+
+    // Cast a vote that should resolve the task
+    // This will call release_funds on the vault (which is the contract itself)
+    // Since the contract doesn't implement release_funds, it should fail
+    // But with our fix, the task should still resolve
+    client.vote(&guardian, &1u64);
+
+    // Verify the task is done even though the vault call failed
+    let task = client.get_task(&1u64).unwrap();
+    assert!(
+        task.is_done,
+        "Task should be resolved even when vault call fails"
+    );
+    assert_eq!(task.votes, 1);
+    assert_eq!(task.total_weight_accrued, 500);
+}

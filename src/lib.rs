@@ -18,7 +18,8 @@ mod drips;
 /// Contract event emitters.
 pub mod events;
 
-mod gas;
+/// Instruction-cost estimates for public entry points.
+pub mod gas;
 mod guardian;
 mod migrate;
 mod reentrancy;
@@ -36,7 +37,11 @@ pub use contracts::rbac::{grant_role_internal, has_role, require_role, revoke_ro
 pub use drips::{get_reward_stream, start_drips_stream};
 pub use guardian::{add_guardian, get_all_guardians, is_guardian};
 pub use task::{get_task, register_tasks};
-pub use types::{BatchCall, ContractError, DataKey, Operation, Role};
+pub use types::{
+    BatchCall, ContractError, DataKey, GuardianEntry, Operation, RewardStream, Role, Snapshot,
+    SnapshotMeta, Task,
+};
+pub use utils::address::ZERO_ADDRESS_STR;
 
 /// Default weight threshold: a task requires at least 300 cumulative
 /// reputation weight to be resolved. This can be overridden by the

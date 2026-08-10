@@ -15,18 +15,17 @@ use crate::types::Operation;
 // All figures are in instruction units, which map 1-to-1 to the `fee_per_instruction_increment`
 // ledger base-fee calculation used by Stellar's fee schedule.
 
-/// `register_task`: base + reentrancy lock write + has() check + task write + unlock write.
-/// `500_000 + 150_000 + 50_000 + 150_000 + 150_000`
-pub const COST_REGISTER_TASK: u64 = 1_000_000;
+/// `register_task`: base + reentrancy lock write + has() check + role check + task write + index write + unlock write + event.
+/// `500_000 + 150_000 + 50_000 + 50_000 + 150_000 + 150_000 + 150_000 + 30_000`
+pub const COST_REGISTER_TASK: u64 = 1_300_000;
 
 /// `vote`:
 ///   base + circuit-breaker read + 5 reads (token, threshold, balance, voted, task)
 ///   + reentrancy lock/unlock (2 writes) + voted write + task write + event emission
-///   + conditional cross-contract call to vault
-///     500_000 + 5*50_000 + 2*150_000 + 2*150_000 + 2*30_000 + 500_000
-///
-///   500_000 + 5*50_000 + 2*150_000 + 2*150_000 + 2*30_000 + 500_000
-pub const COST_VOTE: u64 = 1_960_000;
+///   + conditional fault-isolated `try_release_funds` cross-contract call to vault
+///     (the `try_` invocation carries extra host overhead over a direct call)
+///     500_000 + 5*50_000 + 2*150_000 + 2*150_000 + 2*30_000 + 1_500_000
+pub const COST_VOTE: u64 = 3_200_000;
 
 /// `add_guardian`: base + circuit-breaker read + guardian write.
 /// `500_000 + 50_000 + 150_000`
@@ -36,22 +35,20 @@ pub const COST_ADD_GUARDIAN: u64 = 700_000;
 /// `500_000 + 50_000 + 150_000`
 pub const COST_SET_REPUTATION: u64 = 700_000;
 
-/// `lock_tokens`: base + has() check + token cross-contract transfer + balance read + balance write.
-/// `500_000 + 50_000 + 500_000 + 50_000 + 150_000`
-pub const COST_LOCK_TOKENS: u64 = 1_250_000;
+/// `lock_tokens`:
+///   base + paused read + auth + token read + fee_bps read + treasury read + 2x transfer + balance read + balance write + event
+///   500_000 + 5*50_000 + 2*1_500_000 + 50_000 + 150_000 + 30_000
+pub const COST_LOCK_TOKENS: u64 = 5_000_000;
 
 /// `unlock_tokens`:
-///   base + has() check + guardian read + balance read + token transfer + balance write
-///     500_000 + 50_000 + 50_000 + 50_000 + 500_000 + 150_000
-pub const COST_UNLOCK_TOKENS: u64 = 1_300_000;
+///   base + has() check + guardian read + balance read + fee read + treasury read + 2x token transfer + balance write
+///   500_000 + 50_000 + 50_000 + 50_000 + 50_000 + 50_000 + 2*1_500_000 + 150_000
+pub const COST_UNLOCK_TOKENS: u64 = 5_000_000;
 
 /// `resign_guardian`:
-///   base + has() check + guardian status write + balance read
-///   + conditional token transfer + balance write
-///     500_000 + 50_000 + 150_000 + 50_000 + 500_000 + 150_000
-///
-///   500_000 + 50_000 + 150_000 + 50_000 + 500_000 + 150_000
-pub const COST_RESIGN_GUARDIAN: u64 = 1_400_000;
+///   base + has() check + guardian status write + balance read + fee read + treasury read + 2x conditional token transfer + balance write
+///   500_000 + 50_000 + 150_000 + 50_000 + 50_000 + 50_000 + 2*1_500_000 + 150_000
+pub const COST_RESIGN_GUARDIAN: u64 = 5_000_000;
 
 /// `set_weight_threshold`: base + threshold write.
 /// `500_000 + 150_000`
@@ -69,9 +66,10 @@ pub const COST_START_REWARD_STREAM: u64 = 1_330_000;
 /// `500_000 + 50_000 + 150_000 + 30_000`
 pub const COST_TOGGLE_PAUSE: u64 = 730_000;
 
-/// `record_failure`: base + failure-count read + failure-count write + conditional paused write + event.
-/// `500_000 + 50_000 + 150_000 + 150_000 + 30_000`
-pub const COST_RECORD_FAILURE: u64 = 880_000;
+/// `record_failure(reporter)`: base + auth + trusted-mode read + cooldown read + reporter-quota read + reporter index read/write + last-report write + reporter-count write + failure-count read/write + conditional paused write + report event + conditional trip event.
+///
+/// `500_000 + 4*50_000 + 5*150_000 + 2*30_000`
+pub const COST_RECORD_FAILURE: u64 = 1_510_000;
 
 /// `reset_circuit_breaker`: base + failure-count write + paused remove.
 /// `500_000 + 150_000 + 150_000`
@@ -83,6 +81,11 @@ pub const COST_UPGRADE_CONTRACT: u64 = 2_500_000;
 
 /// `record_snapshot`: base + get_snapshot reads + 2 writes (AllSnapshots + Snapshot) + event.
 /// `500_000 + 20*50_000 + 2*150_000 + 30_000`
+///
+/// This is a fixed estimate for a small/typical guardian+task count. Once any
+/// collection nears `logic::MAX_SNAPSHOT_COLLECTION_SIZE`, `record_snapshot`
+/// costs scale with collection size (and above the cap it reverts with
+/// `SnapshotTooLarge` rather than exceeding the ledger's instruction budget).
 pub const COST_RECORD_SNAPSHOT: u64 = 1_830_000;
 
 /// `purge_task`: base + 2 task reads + AllTasks read + per-voter Voted removes (avg 5) +

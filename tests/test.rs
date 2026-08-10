@@ -24,6 +24,24 @@ fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     (env, contract_id, admin, token_addr, client)
 }
 
+/// Trip the circuit breaker legitimately: multiple distinct authenticated
+/// reporters, each honouring the per-address cooldown and quota.
+fn trip_circuit_breaker(env: &Env, client: &VeroContractClient) {
+    let reporters: std::vec::Vec<Address> = (0..11).map(|_| Address::generate(env)).collect();
+    let mut recorded = 0;
+    'outer: for round in 0..5 {
+        env.ledger()
+            .set_sequence_number(env.ledger().sequence() + 20 * (round + 1));
+        for r in &reporters {
+            if recorded >= 51 {
+                break 'outer;
+            }
+            client.record_failure(r);
+            recorded += 1;
+        }
+    }
+}
+
 fn add_guardian_with_rep(
     env: &Env,
     client: &VeroContractClient,
@@ -756,18 +774,18 @@ fn archive_timestamp_underflow_is_safely_rejected_without_mutation() {
     assert_eq!(client.get_task(&61).unwrap().resolved_at, 1_000);
 
     env.ledger().set_timestamp(0);
-    assert!(client.try_archive_task(&61).is_err());
+    assert!(client.try_archive_task(&admin, &61).is_err());
     assert!(client.get_task(&61).is_some());
     assert!(client.get_archived_task(&61).is_none());
 
     env.ledger().set_timestamp(1_000 + ARCHIVE_AFTER_SECONDS);
-    assert!(client.try_archive_task(&61).is_err());
+    assert!(client.try_archive_task(&admin, &61).is_err());
     assert!(client.get_task(&61).is_some());
     assert!(client.get_archived_task(&61).is_none());
 
     env.ledger()
         .set_timestamp(1_000 + ARCHIVE_AFTER_SECONDS + 1);
-    client.archive_task(&61);
+    client.archive_task(&admin, &61);
     assert!(client.get_task(&61).is_none());
     assert!(client.get_archived_task(&61).is_some());
 }
@@ -903,9 +921,7 @@ fn legacy_low_weight_votes_do_not_resolve_early() {
     assert_eq!(task.votes, 5);
     assert_eq!(task.total_weight_accrued, 250);
     assert!(!task.is_done);
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
 
     let stranger = Address::generate(&env);
@@ -917,9 +933,7 @@ fn test_contract_paused_error_on_add_guardian() {
     let (env, _contract_id, admin, _token, client) = setup();
     let guardian = Address::generate(&env);
 
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
 
     assert!(client.try_add_guardian(&admin, &guardian).is_err());
@@ -1078,9 +1092,7 @@ fn test_admin_can_reset_circuit_breaker() {
     let g = add_guardian_with_rep(&env, &client, &admin, 100);
     lock_for_guardian(&env, &token, &client, &g, 101);
 
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
     assert!(client.try_vote(&g, &2).is_err());
 
@@ -1091,12 +1103,10 @@ fn test_admin_can_reset_circuit_breaker() {
 #[test]
 fn test_paused_contract_rejects_register_task() {
     let (_env, _contract_id, admin, _token, client, &1u32) = setup();
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(!client.is_paused());
 
-    client.record_failure();
+    client.record_failure(&Address::generate(&_env));
     assert!(client.is_paused());
 }
 
@@ -1352,6 +1362,27 @@ fn test_non_admin_cannot_purge_task() {
 }
 
 #[test]
+fn test_non_taskmanager_cannot_archive_task() {
+    let (env, _contract_id, admin, token, client) = setup();
+    client.set_weight_threshold(&admin, &1);
+    let guardian = add_guardian_with_rep(&env, &client, &admin, 1);
+    client.register_task(&admin, &70u64, &1u32, &1u32);
+    lock_for_guardian(&env, &token, &client, &guardian, 101);
+    env.ledger().set_timestamp(1_000);
+    client.vote(&guardian, &70u64);
+    env.ledger()
+        .set_timestamp(1_000 + ARCHIVE_AFTER_SECONDS + 1);
+
+    let stranger = Address::generate(&env);
+    let result = client.try_archive_task(&stranger, &70u64);
+    assert!(result.is_err());
+
+    // Task must remain active, not archived
+    assert!(client.get_task(&70u64).is_some());
+    assert!(client.get_archived_task(&70u64).is_none());
+}
+
+#[test]
 fn test_purge_archived_task_removes_storage() {
     let (env, _contract_id, admin, token, client) = setup();
     client.set_weight_threshold(&admin, &300u64);
@@ -1368,7 +1399,7 @@ fn test_purge_archived_task_removes_storage() {
     let resolved = client.get_task(&40u64).unwrap().resolved_at;
     let thirty_days_plus_one: u64 = 30 * 24 * 60 * 60 + 1;
     env.ledger().set_timestamp(resolved + thirty_days_plus_one);
-    client.archive_task(&40u64);
+    client.archive_task(&admin, &40u64);
 
     // Task must be archived
     assert!(client.get_archived_task(&40u64).is_some());
@@ -1611,4 +1642,43 @@ fn test_dynamic_min_votes_unresolved_at_four_of_five() {
     let task = client.get_task(&500u64).unwrap();
     assert_eq!(task.votes, 5);
     assert!(task.is_done, "task must resolve once 5 votes are cast");
+}
+
+/// Test that task resolution succeeds even when the vault call fails.
+/// This verifies the fault isolation fix for issue #134.
+#[test]
+fn test_task_resolves_when_vault_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Use the contract itself as a "failing vault" by setting it as the vault
+    // and not implementing release_funds properly
+    let (env, contract_id, admin, token_addr, client) = setup();
+
+    // Set the vault to the contract itself (which doesn't implement release_funds)
+    client.set_vault_address(&admin, &contract_id);
+
+    // Add a guardian with reputation
+    let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
+
+    // Set weight threshold to 300
+    client.set_weight_threshold(&admin, &300u64);
+
+    // Register a task
+    client.register_task(&admin, &1u64);
+
+    // Cast a vote that should resolve the task
+    // This will call release_funds on the vault (which is the contract itself)
+    // Since the contract doesn't implement release_funds, it should fail
+    // But with our fix, the task should still resolve
+    client.vote(&guardian, &1u64);
+
+    // Verify the task is done even though the vault call failed
+    let task = client.get_task(&1u64).unwrap();
+    assert!(
+        task.is_done,
+        "Task should be resolved even when vault call fails"
+    );
+    assert_eq!(task.votes, 1);
+    assert_eq!(task.total_weight_accrued, 500);
 }

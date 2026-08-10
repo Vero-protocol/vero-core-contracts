@@ -1,6 +1,7 @@
 # Vero Core Contracts — Makefile
 #
 # Targets:
+#   initialize-testnet  - Initialize contract on testnet
 #   build            — Compile the WASM contract
 #   test             — Run all unit and integration tests
 #   check            — Quick syntax check without full compilation

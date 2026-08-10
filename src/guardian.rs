@@ -31,6 +31,25 @@ pub fn add_guardian(env: &Env, admin: Address, guardian: Address) -> Result<(), 
         .instance()
         .set(&DataKey::AllGuardians, &all_guardians);
 
+    // Maintain a dense slot index alongside `AllGuardians` so paginated
+    // reads (`get_guardians_page`) can fetch a bounded page of slots instead
+    // of the whole guardian set. See `remove_guardian` for the matching
+    // swap-remove compaction.
+    let slot: u32 = env
+        .storage()
+        .instance()
+        .get(&DataKey::GuardianIndexCount)
+        .unwrap_or(0);
+    env.storage()
+        .instance()
+        .set(&DataKey::GuardianIndexAt(slot), &guardian);
+    env.storage()
+        .instance()
+        .set(&DataKey::GuardianIndexOf(guardian.clone()), &slot);
+    env.storage()
+        .instance()
+        .set(&DataKey::GuardianIndexCount, &(slot + 1));
+
     env.storage().instance().set(&key, &true);
     env.storage().instance().extend_ttl(LEDGER_TTL, LEDGER_TTL);
     Ok(())
@@ -63,6 +82,47 @@ pub fn remove_guardian(env: &Env, admin: Address, guardian: Address) -> Result<(
     env.storage()
         .instance()
         .set(&DataKey::AllGuardians, &updated);
+
+    // Swap-remove `guardian` from the dense slot index: move the last slot's
+    // occupant into the freed slot, then shrink the count by one. Keeps
+    // `get_guardians_page` bounded-cost without needing to shift every
+    // subsequent slot on removal.
+    if let Some(slot) = env
+        .storage()
+        .instance()
+        .get::<_, u32>(&DataKey::GuardianIndexOf(guardian.clone()))
+    {
+        let count: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::GuardianIndexCount)
+            .unwrap_or(0);
+        if count > 0 {
+            let last_slot = count - 1;
+            if slot != last_slot {
+                let last_addr: Address = env
+                    .storage()
+                    .instance()
+                    .get(&DataKey::GuardianIndexAt(last_slot))
+                    .unwrap();
+                env.storage()
+                    .instance()
+                    .set(&DataKey::GuardianIndexAt(slot), &last_addr);
+                env.storage()
+                    .instance()
+                    .set(&DataKey::GuardianIndexOf(last_addr), &slot);
+            }
+            env.storage()
+                .instance()
+                .remove(&DataKey::GuardianIndexAt(last_slot));
+            env.storage()
+                .instance()
+                .remove(&DataKey::GuardianIndexOf(guardian.clone()));
+            env.storage()
+                .instance()
+                .set(&DataKey::GuardianIndexCount, &last_slot);
+        }
+    }
 
     Ok(())
 }

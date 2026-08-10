@@ -1,6 +1,9 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger as _},
+    Address, Env,
+};
 use vero_core_contracts::{Role, VeroContractClient};
 
 const LOCK_THRESHOLD: i128 = 100;
@@ -26,6 +29,27 @@ fn setup() -> (Env, Address, Address, VeroContractClient<'static>) {
     client.grant_role(&admin, &admin, &Role::TreasuryManager);
 
     (env, admin, token_addr, client)
+}
+
+/// Trip the circuit breaker the *legitimate* way: many distinct, authenticated
+/// reporters, each respecting the per-address cooldown and quota.
+///
+/// A single address deliberately cannot do this — see
+/// `test_single_address_cannot_pause_contract` in `tests/circuit_breaker.rs`.
+fn trip_circuit_breaker(env: &Env, client: &VeroContractClient) {
+    let reporters: std::vec::Vec<Address> = (0..11).map(|_| Address::generate(env)).collect();
+    let mut recorded = 0;
+    'outer: for round in 0..5 {
+        env.ledger()
+            .set_sequence_number(env.ledger().sequence() + 20 * (round + 1));
+        for r in &reporters {
+            if recorded >= 51 {
+                break 'outer;
+            }
+            client.record_failure(r);
+            recorded += 1;
+        }
+    }
 }
 
 // ─── Initial Admin Role Assignment ─────────────────────────────────
@@ -474,9 +498,7 @@ fn test_emergency_manager_can_reset_circuit_breaker() {
     client.grant_role(&admin, &manager, &Role::EmergencyManager);
 
     // Trip the circuit breaker
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
 
     client.reset_circuit_breaker(&manager);
@@ -489,9 +511,7 @@ fn test_non_emergency_manager_cannot_reset_circuit_breaker() {
     let stranger = Address::generate(&env);
 
     // Trip the circuit breaker
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
 
     let result = client.try_reset_circuit_breaker(&stranger);
@@ -536,10 +556,8 @@ fn test_emergency_recover_bypasses_circuit_breaker_trip() {
     let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
     token_admin_client.mint(&client.address, &1000);
 
-    // Trip the circuit breaker automatically via 51 failures
-    for _ in 0..51 {
-        client.record_failure();
-    }
+    // Trip the circuit breaker via distinct, authenticated reporters.
+    trip_circuit_breaker(&env, &client);
     assert!(client.is_paused());
 
     // Emergency recover should succeed when circuit breaker is tripped

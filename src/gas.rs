@@ -15,9 +15,9 @@ use crate::types::Operation;
 // All figures are in instruction units, which map 1-to-1 to the `fee_per_instruction_increment`
 // ledger base-fee calculation used by Stellar's fee schedule.
 
-/// `register_task`: base + reentrancy lock write + has() check + task write + unlock write.
-/// `500_000 + 150_000 + 50_000 + 150_000 + 150_000`
-pub const COST_REGISTER_TASK: u64 = 1_000_000;
+/// `register_task`: base + reentrancy lock write + has() check + role check + task write + index write + unlock write + event.
+/// `500_000 + 150_000 + 50_000 + 50_000 + 150_000 + 150_000 + 150_000 + 30_000`
+pub const COST_REGISTER_TASK: u64 = 1_300_000;
 
 /// `vote`:
 ///   base + circuit-breaker read + 5 reads (token, threshold, balance, voted, task)

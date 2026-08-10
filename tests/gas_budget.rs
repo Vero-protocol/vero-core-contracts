@@ -55,11 +55,14 @@ fn add_guardian_with_rep(
     env: &Env,
     client: &VeroContractClient,
     admin: &Address,
+    token: &Address,
     score: u64,
 ) -> Address {
     let guardian = Address::generate(env);
     client.add_guardian(admin, &guardian);
     client.set_reputation(admin, &guardian, &score);
+    TestTokenClient::new(env, token).mint(&guardian, &1);
+    client.lock_tokens(&guardian, &1);
     guardian
 }
 
@@ -73,8 +76,8 @@ fn test_gas_budget_register_task() {
 
 #[test]
 fn test_gas_budget_vote() {
-    let (env, _, admin, _, client) = setup();
-    let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
+    let (env, _, admin, token, client) = setup();
+    let guardian = add_guardian_with_rep(&env, &client, &admin, &token, 500);
     client.set_weight_threshold(&admin, &500);
     client.register_task(&admin, &1u64, &1u32);
 
@@ -84,8 +87,8 @@ fn test_gas_budget_vote() {
 
 #[test]
 fn test_gas_budget_vote_batch() {
-    let (env, _, admin, _, client) = setup();
-    let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
+    let (env, _, admin, token, client) = setup();
+    let guardian = add_guardian_with_rep(&env, &client, &admin, &token, 500);
     client.set_weight_threshold(&admin, &500);
 
     let mut votes = Vec::new(&env);
@@ -101,7 +104,7 @@ fn test_gas_budget_vote_batch() {
 #[test]
 fn test_gas_budget_lock_tokens() {
     let (env, _, admin, token, client) = setup();
-    let guardian = add_guardian_with_rep(&env, &client, &admin, 500);
+    let guardian = add_guardian_with_rep(&env, &client, &admin, &token, 500);
 
     // Set a fee and treasury to hit the worst-case cross-contract call path
     let treasury = Address::generate(&env);

@@ -1,13 +1,24 @@
-/// Pure, `no_std`-compatible consensus logic — **no Soroban `Env` dependency**.
-///
-/// This module contains the arithmetic and state-transition rules for the
-/// weighted guardian consensus. Keeping this logic free of SDK types allows
-/// Kani (and other model checkers) to formally verify it without mocking the
-/// Soroban host environment.
-///
-/// The contract's `vote()` entry point delegates to [`apply_vote`] after
-/// performing all authentication, authorisation, and storage I/O.
-///
+//! Pure, `no_std`-compatible consensus logic — **no Soroban `Env` dependency**.
+//!
+//! This module contains the arithmetic and state-transition rules for the
+//! weighted guardian consensus. Keeping this logic free of SDK types allows
+//! Kani (and other model checkers) to formally verify it without mocking the
+//! Soroban host environment.
+//!
+//! The contract's `vote()` entry point delegates to [`apply_vote`] after
+//! performing all authentication, authorisation, and storage I/O.
+//!
+//! ## Test placement
+//!
+//! Unlike the rest of the crate, this module's unit tests are **not** inline
+//! — they live in `tests/consensus.rs` in keeping with the crate-wide
+//! convention of placing all tests under `tests/`.  The tests there are
+//! deliberately Soroban-free (no `Env`, no `testutils`) for the same reason
+//! this module is: so that Kani and other model checkers can consume them
+//! without a host-environment mock.  Complementary coverage is provided by
+//! the Kani harnesses in `verification/` and the runtime invariant checks in
+//! `tests/safety_invariants.rs`.
+
 /// Errors that can arise purely from consensus arithmetic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConsensusError {
@@ -112,111 +123,5 @@ pub fn resolution_invariant_holds(state: &ConsensusState, threshold: u64) -> boo
         weight_meets_threshold
     } else {
         true // Not done yet is always safe regardless of weight
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_apply_vote_resolves_at_threshold() {
-        let mut state = ConsensusState::new();
-        apply_vote(&mut state, 300, 300).unwrap();
-        assert!(state.is_done);
-        assert_eq!(state.total_weight_accrued, 300);
-        assert_eq!(state.votes, 1);
-    }
-
-    #[test]
-    fn test_apply_vote_does_not_resolve_below_threshold() {
-        let mut state = ConsensusState::new();
-        apply_vote(&mut state, 299, 300).unwrap();
-        assert!(!state.is_done);
-        assert_eq!(state.total_weight_accrued, 299);
-    }
-
-    #[test]
-    fn test_apply_vote_resolves_above_threshold() {
-        let mut state = ConsensusState::new();
-        apply_vote(&mut state, 500, 300).unwrap();
-        assert!(state.is_done);
-        assert_eq!(state.total_weight_accrued, 500);
-    }
-
-    #[test]
-    fn test_apply_vote_accumulates_across_multiple_votes() {
-        let mut state = ConsensusState::new();
-        apply_vote(&mut state, 100, 300).unwrap();
-        assert!(!state.is_done);
-        apply_vote(&mut state, 100, 300).unwrap();
-        assert!(!state.is_done);
-        apply_vote(&mut state, 100, 300).unwrap();
-        assert!(state.is_done);
-        assert_eq!(state.total_weight_accrued, 300);
-        assert_eq!(state.votes, 3);
-    }
-
-    #[test]
-    fn test_apply_vote_rejects_zero_weight() {
-        let mut state = ConsensusState::new();
-        let err = apply_vote(&mut state, 0, 300).unwrap_err();
-        assert_eq!(err, ConsensusError::ZeroWeight);
-        assert!(!state.is_done);
-        assert_eq!(state.total_weight_accrued, 0);
-    }
-
-    #[test]
-    fn test_apply_vote_overflow_protection() {
-        let mut state = ConsensusState::new();
-        state.total_weight_accrued = u64::MAX;
-        let err = apply_vote(&mut state, 1, 300).unwrap_err();
-        assert_eq!(err, ConsensusError::WeightOverflow);
-        // State must be unchanged after error
-        assert_eq!(state.total_weight_accrued, u64::MAX);
-        assert!(!state.is_done);
-    }
-
-    #[test]
-    fn test_votes_counter_saturates() {
-        let mut state = ConsensusState::new();
-        state.votes = u32::MAX;
-        // Should saturate, not overflow
-        apply_vote(&mut state, 1, u64::MAX).unwrap();
-        assert_eq!(state.votes, u32::MAX);
-    }
-
-    #[test]
-    fn test_is_done_monotone_once_set() {
-        // Once is_done is true, subsequent votes keep it true
-        let mut state = ConsensusState::new();
-        apply_vote(&mut state, 300, 300).unwrap();
-        assert!(state.is_done);
-        // Simulate more votes after resolution — is_done stays true
-        apply_vote(&mut state, 100, 300).unwrap();
-        assert!(state.is_done);
-    }
-
-    #[test]
-    fn test_zero_threshold_first_vote_resolves() {
-        // Threshold = 0: any non-zero weight vote immediately resolves.
-        let mut state = ConsensusState::new();
-        apply_vote(&mut state, 1, 0).unwrap();
-        assert!(state.is_done);
-    }
-
-    #[test]
-    fn test_resolution_invariant_holds_after_vote() {
-        let mut state = ConsensusState::new();
-        apply_vote(&mut state, 400, 300).unwrap();
-        assert!(resolution_invariant_holds(&state, 300));
-    }
-
-    #[test]
-    fn test_resolution_invariant_holds_before_threshold() {
-        let mut state = ConsensusState::new();
-        apply_vote(&mut state, 200, 300).unwrap();
-        assert!(resolution_invariant_holds(&state, 300));
-        assert!(!state.is_done);
     }
 }

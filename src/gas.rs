@@ -22,11 +22,10 @@ pub const COST_REGISTER_TASK: u64 = 1_300_000;
 /// `vote`:
 ///   base + circuit-breaker read + 5 reads (token, threshold, balance, voted, task)
 ///   + reentrancy lock/unlock (2 writes) + voted write + task write + event emission
-///   + conditional cross-contract call to vault
-///     500_000 + 5*50_000 + 2*150_000 + 2*150_000 + 2*30_000 + 500_000
-///
-///   500_000 + 5*50_000 + 2*150_000 + 2*150_000 + 2*30_000 + 500_000
-pub const COST_VOTE: u64 = 1_960_000;
+///   + conditional fault-isolated `try_release_funds` cross-contract call to vault
+///     (the `try_` invocation carries extra host overhead over a direct call)
+///     500_000 + 5*50_000 + 2*150_000 + 2*150_000 + 2*30_000 + 1_500_000
+pub const COST_VOTE: u64 = 3_200_000;
 
 /// `add_guardian`: base + circuit-breaker read + guardian write.
 /// `500_000 + 50_000 + 150_000`

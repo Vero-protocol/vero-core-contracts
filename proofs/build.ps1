@@ -18,7 +18,7 @@ Write-Host "  ✓ consensus-spec.k compiled"
 Write-Host "Step 2: Proving safety invariants..."
 
 $claims = @(
-    @("thresholdInvariant", "P1: Threshold Invariant"),
+    @("thresholdInvariantAfterVote", "P1: Threshold Invariant"),
     @("noBelowThresholdResolution", "P2: No Below-Threshold Resolution"),
     @("monotoneDone", "P3: Monotonic isDone"),
     @("zeroWeightRejected", "P4: Zero Weight Rejected"),

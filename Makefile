@@ -7,11 +7,12 @@
 #   check            — Quick syntax check without full compilation
 #   verify           — Run Kani formal verification harnesses
 #   invariants       — Run runtime safety invariant tests
-#   proofs           — Run K-framework proofs (requires K Framework)
+#   proofs           — Run K-framework proofs on Linux/macOS (requires K Framework)
+#   proofs-windows   — Run K-framework proofs on Windows via PowerShell (requires K Framework)
 #   deploy-testnet   — Upload WASM and deploy a fresh instance on testnet
 #   all              — Build, test, and verify
 
-.PHONY: build test check verify invariants proofs deploy-testnet all
+.PHONY: build test check verify invariants proofs proofs-windows deploy-testnet all
 
 build:
 	cargo build --target wasm32-unknown-unknown --release
@@ -33,6 +34,10 @@ invariants:
 # K-framework proofs (requires K Framework 6.0+)
 proofs:
 	cd proofs && bash build.sh
+
+# K-framework proofs — Windows entry point (requires K Framework 6.0+ and PowerShell)
+proofs-windows:
+	powershell -ExecutionPolicy Bypass -File proofs/build.ps1
 
 # Deploy to testnet.
 # Requires: DEPLOYER_SECRET, TOKEN_CONTRACT_ID, and LOCK_THRESHOLD to be set

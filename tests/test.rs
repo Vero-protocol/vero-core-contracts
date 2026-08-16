@@ -7,6 +7,7 @@ use soroban_sdk::{
 };
 use vero_core_contracts::Operation;
 use vero_core_contracts::VeroContractClient;
+use vero_core_contracts::ARCHIVE_AFTER_SECONDS;
 fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     let env = Env::default();
     env.mock_all_auths();
@@ -1397,7 +1398,7 @@ fn test_purge_archived_task_removes_storage() {
 
     // Archive the task (needs >30 days old)
     let resolved = client.get_task(&40u64).unwrap().resolved_at;
-    let thirty_days_plus_one: u64 = 30 * 24 * 60 * 60 + 1;
+    let thirty_days_plus_one: u64 = ARCHIVE_AFTER_SECONDS + 1;
     env.ledger().set_timestamp(resolved + thirty_days_plus_one);
     client.archive_task(&admin, &40u64);
 

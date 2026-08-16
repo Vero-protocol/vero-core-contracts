@@ -4,9 +4,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     Address, Env,
 };
-use vero_core_contracts::{Role, VeroContractClient};
-
-const ARCHIVE_AFTER_SECONDS: u64 = 30 * 24 * 60 * 60;
+use vero_core_contracts::{Role, VeroContractClient, ARCHIVE_AFTER_SECONDS};
 
 fn setup() -> (Env, Address, Address, VeroContractClient<'static>) {
     let env = Env::default();

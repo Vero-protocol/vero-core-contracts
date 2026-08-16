@@ -48,29 +48,25 @@ On-chain GitHub PR verification for the Stellar ecosystem. Guardians — trusted
 
 | Module | Responsibility |
 |---|---|
-| `types` | `Task`, `DataKey`, `ContractError`, `RewardStream` |
-| `guardian` | Guardian registry with TTL-extended instance storage |
-| `task` | Task registration and retrieval |
-| `reputation` | Guardian reputation scores and voting power calculation |
 | `circuit_breaker` | Emergency halt + DoS-resistant failure reporting: `require_not_paused`, `record_failure`, `reset` |
-| `reentrancy` | Mutex lock/unlock guarding `vote` and `register_task` |
+| `consensus` | Pure, SDK-free consensus arithmetic and state-transition rules |
+| `contracts/logic` | Core contract logic and snapshot/pagination implementation |
+| `contracts/proxy_entry` | Main contract entrypoint `VeroContract` defining the public API |
+| `contracts/rbac` | Role-based access control (RBAC) authorization and role management |
+| `contracts/storage_layout` | Canonical definition of instance storage keys via the `DataKey` enum |
 | `drips` | Cross-contract reward stream initiation via Drips protocol |
-| `vault` | Cross-contract escrow release on task resolution |
 | `events` | On-chain event emission |
+| `gas` | Instruction-unit cost constants and estimation for operations |
+| `guardian` | Guardian registry with TTL-extended instance storage |
 | `lib` | Public contract surface and `vote` orchestration |
-
-| Module            | Responsibility                                                  |
-| ----------------- | --------------------------------------------------------------- |
-| `types`           | `Task`, `DataKey`, `ContractError`, `RewardStream`              |
-| `guardian`        | Guardian registry with TTL-extended instance storage            |
-| `task`            | Task registration and retrieval                                 |
-| `reputation`      | Guardian reputation scores and voting power calculation         |
-| `circuit_breaker` | Emergency halt: `require_not_paused`, `record_failure`, `reset` |
-| `reentrancy`      | Mutex lock/unlock guarding `vote` and `register_task`           |
-| `drips`           | Cross-contract reward stream initiation via Drips protocol      |
-| `vault`           | Cross-contract escrow release on task resolution                |
-| `events`          | On-chain event emission                                         |
-| `lib`             | Public contract surface and `vote` orchestration                |
+| `migrate` | Storage versioning, atomic migrations, and pre-flight validation |
+| `reentrancy` | Mutex lock/unlock guarding `vote` and `register_task` |
+| `reputation` | Guardian reputation scores and voting power calculation |
+| `task` | Task registration and retrieval |
+| `timelock` | Timelock enforcement for guardian token withdrawals |
+| `types` | `Task`, `DataKey`, `ContractError`, `RewardStream` |
+| `utils/address` | Address validation utilities including zero-address rejection |
+| `vault` | Cross-contract escrow release on task resolution |
 
 
 ---

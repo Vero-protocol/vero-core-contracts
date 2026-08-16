@@ -51,6 +51,8 @@ Use the Makefile targets for convenience:
 | `make build` | Compiles the contract to WASM (`--release`) |
 | `make test` | Runs the full test suite |
 | `make deploy-testnet` | Deploys to Stellar testnet (requires env vars) |
+| `make proofs` | Runs K-framework formal proofs (Linux / macOS, requires K Framework 6.0+) |
+| `make proofs-windows` | Runs K-framework formal proofs on Windows via PowerShell (requires K Framework 6.0+) |
 
 Or run the underlying Cargo commands directly:
 
@@ -71,6 +73,28 @@ cargo fmt
 ```
 
 All of these checks run automatically in CI on every pull request. Your PR will not be merged if any of them fail.
+
+### Running formal proofs (K Framework)
+
+The `proofs/` directory contains K-framework formal verification specs. Running them requires [K Framework 6.0+](https://github.com/runtimeverification/k) installed separately.
+
+**Linux / macOS:**
+
+```bash
+make proofs
+# or directly:
+bash proofs/build.sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+make proofs-windows
+# or directly from the proofs/ directory:
+powershell -ExecutionPolicy Bypass -File proofs/build.ps1
+```
+
+See [`proofs/README.md`](proofs/README.md) for a full description of the spec files and what each invariant proves.
 
 ---
 

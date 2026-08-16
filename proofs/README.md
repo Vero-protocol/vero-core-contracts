@@ -13,7 +13,8 @@ invariants, and safety properties of the core consensus logic.
 | `consensus-spec.k` | Main K specification: state, transitions, invariants |
 | `invariants.k` | Safety invariants for the consensus protocol |
 | `proofs.k` | Proof claims (reachability logic) for each invariant |
-| `build.sh` | Build + verification script |
+| `build.sh` | Build + verification script (Linux / macOS) |
+| `build.ps1` | Build + verification script (Windows — PowerShell equivalent of `build.sh`) |
 
 ## Protocol Model
 
@@ -50,6 +51,28 @@ cargo kani --manifest-path ../verification/Cargo.toml
 ### K Framework (deductive verification)
 
 Requires [K Framework 6.0+](https://github.com/runtimeverification/k) installed.
+
+#### Linux / macOS
+
+```bash
+# From the repository root — runs build.sh
+make proofs
+
+# Or directly from the proofs/ directory
+bash build.sh
+```
+
+#### Windows (PowerShell)
+
+```powershell
+# From the repository root — runs build.ps1 via PowerShell
+make proofs-windows
+
+# Or directly from the proofs/ directory
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+#### Manual steps (any platform)
 
 ```bash
 # Compile the specification

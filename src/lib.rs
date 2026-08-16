@@ -41,6 +41,7 @@ pub use types::{
     BatchCall, ContractError, DataKey, GuardianEntry, Operation, RewardStream, Role, Snapshot,
     SnapshotMeta, Task,
 };
+pub use storage::ARCHIVE_AFTER_SECONDS;
 pub use utils::address::ZERO_ADDRESS_STR;
 
 /// Default weight threshold: a task requires at least 300 cumulative

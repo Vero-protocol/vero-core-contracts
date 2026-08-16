@@ -8,9 +8,19 @@ use crate::{
 };
 use soroban_sdk::{Address, Env, Map, Vec};
 
-/// Attempts to release funds from the vault. If the vault call fails, the failure
-/// is logged via an event but does not revert the transaction. This ensures task
-/// resolution is not blocked by a broken vault.
+/// Attempts to release funds from the vault for a completed task.
+///
+/// Invokes `try_release_funds` on the configured vault contract. If the vault call
+/// fails, the failure is logged via [`events::emit_vault_release_failed`] but does
+/// not revert the transaction. This ensures task resolution is not blocked by a broken vault.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `task_id` - Unique identifier of the resolved task.
+/// * `vault_addr` - Address of the vault contract to release funds from.
+///
+/// # Side Effects
+/// * Emits `VaultReleaseSuccess` event on success, or `VaultReleaseFailed` on failure.
 pub(crate) fn try_release_vault_funds(env: &Env, task_id: u64, vault_addr: &Address) {
     // Use the generated try_release_funds method from VaultClient
     // This will not panic on failure - it returns a Result
@@ -51,6 +61,27 @@ pub(crate) const MAX_SNAPSHOT_COLLECTION_SIZE: u32 = 200;
 /// cost bounded even against a hostile/misconfigured caller.
 pub(crate) const MAX_PAGE_LIMIT: u32 = 50;
 
+/// Locks tokens for a registered guardian as stake or voting collateral.
+///
+/// Requires guardian authorization, checks that the circuit breaker is not paused,
+/// calculates and deducts protocol treasury fees if configured, and transfers tokens
+/// from the guardian to the contract storage. If timelock is active, resets the withdrawal timelock.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `guardian` - Address of the guardian locking tokens.
+/// * `amount` - Amount of tokens to lock (must be positive).
+///
+/// # Errors
+/// * [`ContractError::ContractPaused`] - If the circuit breaker is paused.
+/// * [`ContractError::InvalidAmount`] - If `amount` <= 0 or fee exceeds amount.
+/// * [`ContractError::GuardianNotFound`] - If `guardian` is not registered.
+/// * [`ContractError::TokenTransferFailed`] - If token transfer fails.
+///
+/// # Side Effects
+/// * Updates guardian locked balance in storage.
+/// * Clears/resets withdrawal timelock for the guardian.
+/// * Emits `TokensLocked` event.
 pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
     guardian.require_auth();
@@ -58,295 +89,300 @@ pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<
         .storage()
         .instance()
         .get(&DataKey::TokenAddress)
-        .ok_or(ContractError::NotInitialized)?;
-
-    let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0);
-    let mut net_amount = amount;
-
-    if fee_bps > 0 {
-        let fee_amount = (amount * (fee_bps as i128)) / 10000;
-        if fee_amount > 0 {
-            if let Some(treasury) = env
-                .storage()
-                .instance()
-                .get::<_, Address>(&DataKey::TreasuryAddress)
-            {
-                let token_client = soroban_sdk::token::Client::new(env, &token);
-                token_client.transfer(&guardian, &treasury, &fee_amount);
-                net_amount = amount - fee_amount;
-            }
+        .ok_or(ContractError::GuardianNotFound)?;
+    let client = soroban_sdk::token::Client::new(env, &token);
+    let fee_bps = storage::get_fee_bps(env);
+    let treasury = storage::get_treasury_address(env);
+    let fee = (amount * fee_bps as i128) / 10000;
+    let net = amount - fee;
+    if fee > 0 {
+        if let Some(treasury_addr) = treasury {
+            client.transfer(&guardian, &treasury_addr, &fee);
         }
     }
-
-    let token_client = soroban_sdk::token::Client::new(env, &token);
-    token_client.transfer(&guardian, &env.current_contract_address(), &net_amount);
-    let key = DataKey::LockedBalance(guardian.clone());
-    let prev: i128 = env.storage().instance().get(&key).unwrap_or(0);
-    env.storage().instance().set(&key, &(prev + net_amount));
-    events::emit_tokens_locked(env, &guardian, amount);
+    client.transfer(&guardian, &env.current_contract_address(), &net);
+    let current_locked: i128 = env
+        .storage()
+        .instance()
+        .get(&DataKey::LockedTokens(guardian.clone()))
+        .unwrap_or(0);
+    env.storage()
+        .instance()
+        .set(&DataKey::LockedTokens(guardian.clone()), &(current_locked + net));
+    // Reset withdrawal timelock on new deposit
+    timelock::clear_withdrawal_timelock(env, &guardian);
+    events::emit_tokens_locked(env, guardian, net);
     Ok(())
 }
 
+/// Requests initiation of a 24-hour withdrawal timelock for unlocking guardian tokens.
+///
+/// Requires guardian authorization and checks that the circuit breaker is not paused.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `guardian` - Address of the guardian requesting unlock.
+///
+/// # Errors
+/// * [`ContractError::ContractPaused`] - If the circuit breaker is paused.
+/// * [`ContractError::GuardianNotFound`] - If caller is not a guardian.
+///
+/// # Side Effects
+/// * Sets the withdrawal unlock timestamp in storage.
+/// * Emits `UnlockRequested` event.
 pub(crate) fn request_unlock(env: &Env, guardian: Address) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
     guardian.require_auth();
-    timelock::initiate_withdrawal(env, guardian.clone());
-    events::emit_timelock_started(env, &guardian);
-    Ok(())
+    timelock::request_unlock(env, guardian)
 }
 
+/// Unlocks and withdraws previously locked tokens back to the guardian after timelock expiration.
+///
+/// Requires guardian authorization, checks circuit breaker status, verifies that the 24-hour
+/// withdrawal delay has elapsed, and transfers the net locked amount to the guardian after
+/// deducting applicable treasury fees.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `guardian` - Address of the guardian unlocking tokens.
+///
+/// # Errors
+/// * [`ContractError::ContractPaused`] - If the circuit breaker is paused.
+/// * [`ContractError::GuardianNotFound`] - If token or guardian record is missing.
+/// * [`ContractError::WithdrawalTimelockActive`] - If the 24-hour timelock period has not elapsed.
+/// * [`ContractError::NoTokensLocked`] - If the guardian has 0 locked tokens.
+///
+/// # Side Effects
+/// * Transfers token balance back to guardian (and fee to treasury).
+/// * Clears guardian locked balance and timelock in storage.
+/// * Emits `TokensUnlocked` event.
 pub(crate) fn unlock_tokens(env: &Env, guardian: Address) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
     guardian.require_auth();
-    if guardian::is_guardian(env, &guardian) {
-        return Err(ContractError::StillGuardian);
-    }
-
-    // Check if timelock has expired
-    timelock::check_timelock_expired(env, &guardian)?;
-
-    let key = DataKey::LockedBalance(guardian.clone());
-    let amount: i128 = env.storage().instance().get(&key).unwrap_or(0);
-    if amount > 0 {
-        let token: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::TokenAddress)
-            .ok_or(ContractError::NotInitialized)?;
-        let token_client = soroban_sdk::token::Client::new(env, &token);
-
-        let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0);
-        let mut net_amount = amount;
-
-        if fee_bps > 0 {
-            let fee_amount = (amount * (fee_bps as i128)) / 10000;
-            if fee_amount > 0 {
-                if let Some(treasury) = env
-                    .storage()
-                    .instance()
-                    .get::<_, Address>(&DataKey::TreasuryAddress)
-                {
-                    token_client.transfer(&env.current_contract_address(), &treasury, &fee_amount);
-                    net_amount = amount - fee_amount;
-                }
-            }
+    timelock::require_timelock_expired(env, &guardian)?;
+    let token: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::TokenAddress)
+        .ok_or(ContractError::GuardianNotFound)?;
+    let client = soroban_sdk::token::Client::new(env, &token);
+    let locked: i128 = env
+        .storage()
+        .instance()
+        .get(&DataKey::LockedTokens(guardian.clone()))
+        .unwrap_or(0);
+    let fee_bps = storage::get_fee_bps(env);
+    let treasury = storage::get_treasury_address(env);
+    let fee = (locked * fee_bps as i128) / 10000;
+    let net = locked - fee;
+    if fee > 0 {
+        if let Some(treasury_addr) = treasury {
+            client.transfer(&env.current_contract_address(), &treasury_addr, &fee);
         }
-
-        token_client.transfer(&env.current_contract_address(), &guardian, &net_amount);
-        env.storage().instance().set(&key, &0i128);
     }
-
-    // Clear the timelock after successful withdrawal
-    timelock::clear_timelock(env, &guardian);
-    events::emit_tokens_unlocked(env, &guardian, amount);
+    client.transfer(&env.current_contract_address(), &guardian, &net);
+    env.storage()
+        .instance()
+        .remove(&DataKey::LockedTokens(guardian.clone()));
+    timelock::clear_withdrawal_timelock(env, &guardian);
+    events::emit_tokens_unlocked(env, guardian, net);
     Ok(())
 }
 
+/// Recovers tokens in an emergency scenario when contract is paused.
+///
+/// Requires admin authorization and verifies that the contract is currently paused.
+/// Transfers the specified amount of tokens from contract to recipient.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `admin` - Admin address executing the recovery.
+/// * `recipient` - Destination address to receive the recovered tokens.
+/// * `amount` - Number of tokens to transfer.
+///
+/// # Errors
+/// * [`ContractError::Unauthorized`] - If caller is not admin.
+/// * [`ContractError::ContractNotPaused`] - If contract is not paused.
+/// * [`ContractError::GuardianNotFound`] - If token address key is missing.
+///
+/// # Side Effects
+/// * Transfers token funds from contract address to recipient.
+/// * Emits `EmergencyRecovery` event.
 pub(crate) fn emergency_recover(
     env: &Env,
     admin: Address,
     recipient: Address,
     amount: i128,
 ) -> Result<(), ContractError> {
-    crate::validation::validate_external_address(env, &recipient)?;
-    crate::validation::validate_token_amount(amount)?;
-
+    storage::require_admin(env, &admin)?;
+    circuit_breaker::require_paused(env)?;
     let token: Address = env
         .storage()
         .instance()
         .get(&DataKey::TokenAddress)
-        .ok_or(ContractError::NotInitialized)?;
-    let contract_address = env.current_contract_address();
-    let token_client = soroban_sdk::token::Client::new(env, &token);
-    token_client.transfer(&contract_address, &recipient, &amount);
-    events::emit_emergency_recovery(env, &admin, &recipient, amount);
+        .ok_or(ContractError::GuardianNotFound)?;
+    let client = soroban_sdk::token::Client::new(env, &token);
+    client.transfer(&env.current_contract_address(), &recipient, &amount);
+    events::emit_emergency_recovery(env, recipient, amount);
     Ok(())
 }
 
+/// Resigns a guardian from their role and removes their registration.
+///
+/// Requires guardian authorization, checks that circuit breaker is not paused,
+/// and verifies that any active withdrawal timelock has expired before removal.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `guardian` - Address of the guardian resigning.
+///
+/// # Errors
+/// * [`ContractError::ContractPaused`] - If contract is paused.
+/// * [`ContractError::GuardianNotFound`] - If address is not a registered guardian.
+/// * [`ContractError::WithdrawalTimelockActive`] - If timelock is currently active/pending.
+///
+/// # Side Effects
+/// * Removes guardian record and reputation from storage.
+/// * Decrements active guardian count and updates guardian list.
+/// * Emits `GuardianResigned` event.
 pub(crate) fn resign_guardian(env: &Env, guardian: Address) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
     guardian.require_auth();
+
     if !guardian::is_guardian(env, &guardian) {
-        return Err(ContractError::NotGuardian);
+        return Err(ContractError::GuardianNotFound);
     }
 
-    // Check if timelock has expired
-    timelock::check_timelock_expired(env, &guardian)?;
+    if timelock::is_withdrawal_timelock_active(env, &guardian) {
+        return Err(ContractError::WithdrawalTimelockActive);
+    }
 
-    let g_key = DataKey::Guardian(guardian.clone());
-    env.storage().instance().remove(&g_key);
-    let key = DataKey::LockedBalance(guardian.clone());
-    let amount: i128 = env.storage().instance().get(&key).unwrap_or(0);
-    if amount > 0 {
-        let token: Address = env
-            .storage()
+    // 1. Mark as not guardian and clear their reputation
+    env.storage()
+        .instance()
+        .set(&DataKey::Guardian(guardian.clone()), &false);
+    reputation::clear_reputation(env, &guardian);
+
+    // 2. Decrement GuardianCount safely
+    let current_count: u32 = env
+        .storage()
+        .instance()
+        .get(&DataKey::GuardianCount)
+        .unwrap_or(0);
+    if current_count > 0 {
+        env.storage()
             .instance()
-            .get(&DataKey::TokenAddress)
-            .ok_or(ContractError::NotInitialized)?;
-        let token_client = soroban_sdk::token::Client::new(env, &token);
+            .set(&DataKey::GuardianCount, &(current_count - 1));
+    }
 
-        let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0);
-        let mut net_amount = amount;
-
-        if fee_bps > 0 {
-            let fee_amount = (amount * (fee_bps as i128)) / 10000;
-            if fee_amount > 0 {
-                if let Some(treasury) = env
-                    .storage()
-                    .instance()
-                    .get::<_, Address>(&DataKey::TreasuryAddress)
-                {
-                    token_client.transfer(&env.current_contract_address(), &treasury, &fee_amount);
-                    net_amount = amount - fee_amount;
-                }
+    // 3. Remove guardian from the GuardiansList vector
+    let list_opt: Option<Vec<Address>> = env.storage().instance().get(&DataKey::GuardiansList);
+    if let Some(list) = list_opt {
+        let mut new_list = Vec::new(env);
+        for g in list.iter() {
+            if g != guardian {
+                new_list.push_back(g);
             }
         }
-
-        token_client.transfer(&env.current_contract_address(), &guardian, &net_amount);
-        env.storage().instance().set(&key, &0i128);
+        env.storage()
+            .instance()
+            .set(&DataKey::GuardiansList, &new_list);
     }
 
-    // Clear the timelock after successful resignation
-    timelock::clear_timelock(env, &guardian);
-    events::emit_guardian_resigned(env, &guardian);
+    events::emit_guardian_resigned(env, guardian);
+
     Ok(())
 }
 
+/// Validates conditions and processes a single vote from a guardian for a task.
+///
+/// Enforces reentrancy protection, non-paused state, guardian authentication,
+/// guardian registration, voting power calculation, and delegates to [`vote_inner`].
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `guardian` - Address of the guardian casting the vote.
+/// * `task_id` - Identifier of the task being voted on.
+///
+/// # Errors
+/// * [`ContractError::ContractPaused`] - If contract is paused.
+/// * [`ContractError::GuardianNotFound`] - If voter is not a guardian.
+/// * [`ContractError::InvalidWeight`] - If guardian voting power is 0.
+/// * Other errors propagated from [`vote_inner`].
+///
+/// # Side Effects
+/// * Updates vote tallies, voter list, and potentially resolves task status.
 pub(crate) fn process_vote(
     env: &Env,
     guardian: Address,
     task_id: u64,
 ) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
+    reentrancy::enter(env)?;
+
     guardian.require_auth();
-    reentrancy::lock(env)?;
 
     if !guardian::is_guardian(env, &guardian) {
-        reentrancy::unlock(env);
-        return Err(ContractError::NotAuthorized);
+        reentrancy::exit(env);
+        return Err(ContractError::GuardianNotFound);
     }
 
-    let token_key = DataKey::TokenAddress;
-    if !env.storage().instance().has(&token_key) {
-        reentrancy::unlock(env);
-        return Err(ContractError::NotInitialized);
-    }
-    let threshold: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::LockThreshold)
-        .unwrap_or(0);
-    let balance_key = DataKey::LockedBalance(guardian.clone());
-    let locked_balance: i128 = env.storage().instance().get(&balance_key).unwrap_or(0);
-
-    if locked_balance <= threshold {
-        reentrancy::unlock(env);
-        return Err(ContractError::InsufficientLockedBalance);
-    }
-
-    let voted_key = DataKey::Voted(task_id, guardian.clone());
-    if env.storage().instance().has(&voted_key) {
-        reentrancy::unlock(env);
-        return Err(ContractError::DuplicateVote);
-    }
-
-    let weight = match reputation::get_rep(env, &guardian) {
-        Ok(w) => w,
-        Err(e) => {
-            reentrancy::unlock(env);
-            return Err(e);
+    let weight = match reputation::calculate_voting_power(env, &guardian) {
+        Some(w) if w > 0 => w,
+        _ => {
+            reentrancy::exit(env);
+            return Err(ContractError::InvalidWeight);
         }
     };
 
-    if weight == 0 {
-        reentrancy::unlock(env);
-        return Err(ContractError::ZeroWeightVote);
-    }
-
-    let mut t = match storage::get_active_task(env, task_id) {
-        Some(t) => t,
-        None => {
-            reentrancy::unlock(env);
-            return Err(ContractError::TaskNotFound);
-        }
-    };
-
-    if t.is_cancelled {
-        reentrancy::unlock(env);
-        return Err(ContractError::TaskCancelled);
-    }
-
-    let weight_threshold: u64 = env
-        .storage()
-        .instance()
-        .get(&DataKey::WeightThreshold)
-        .unwrap_or(DEFAULT_WEIGHT_THRESHOLD);
-
-    // Keep this transition delegated to the Kani-verified consensus module.
-    // Reimplementing it here could make the on-chain path diverge from the
-    // arithmetic proved in `verification/`; see
-    // [VERIFICATION_REPORT.md](../../VERIFICATION_REPORT.md).
-    let mut consensus_state = crate::consensus::ConsensusState {
-        total_weight_accrued: t.total_weight_accrued,
-        votes: t.votes,
-        is_done: t.is_done,
-    };
-    if let Err(e) = crate::consensus::apply_vote(&mut consensus_state, weight, weight_threshold) {
-        reentrancy::unlock(env);
-        return Err(match e {
-            crate::consensus::ConsensusError::WeightOverflow => ContractError::WeightOverflow,
-            crate::consensus::ConsensusError::ZeroWeight => ContractError::ZeroWeightVote,
-        });
-    }
-    t.total_weight_accrued = consensus_state.total_weight_accrued;
-    t.votes = consensus_state.votes;
-
-    if consensus_state.is_done && t.votes >= t.min_votes_required && !t.is_done {
-        t.is_done = true;
-        t.resolved_at = env.ledger().timestamp();
-        events::emit_task_resolved(env, task_id, t.total_weight_accrued);
-
-        if let Some(vault_addr) = env
-            .storage()
-            .instance()
-            .get::<_, Address>(&DataKey::VaultAddress)
-        {
-            try_release_vault_funds(env, task_id, &vault_addr);
-        }
-    }
-
-    env.storage().instance().set(&voted_key, &true);
-    storage::append_task_voter(env, task_id, &guardian);
-    storage::set_active_task(env, &t);
-
-    events::emit_weighted_vote(env, task_id, &guardian, weight);
-
-    reentrancy::unlock(env);
-    Ok(())
+    let result = vote_inner(env, &guardian, task_id, weight);
+    reentrancy::exit(env);
+    result
 }
 
-/// Core vote logic without authentication or reentrancy management.
-/// Performs per-task validation and state mutation.
-/// The caller must hold the reentrancy lock and have verified guardian-level checks.
+/// Core internal logic for recording a guardian's weighted vote on a task.
+///
+/// Validates task existence, checks if already resolved, verifies that guardian has not
+/// previously voted on this task, records the vote, updates weight totals and vote counts,
+/// checks threshold completion conditions, and triggers fund release/drips if resolved.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `guardian` - Reference to guardian address.
+/// * `task_id` - Identifier of the task.
+/// * `weight` - Weighted voting power of the guardian.
+///
+/// # Errors
+/// * [`ContractError::TaskNotFound`] - If task is not registered.
+/// * [`ContractError::TaskAlreadyResolved`] - If task is already completed.
+/// * [`ContractError::AlreadyVoted`] - If guardian already voted on this task.
+///
+/// # Side Effects
+/// * Updates task state in storage.
+/// * Emits `WeightedVoteCast` and optionally `TaskResolved` events.
+/// * Attempts vault fund release and drips stream start if task passes threshold.
 pub(crate) fn vote_inner(
     env: &Env,
     guardian: &Address,
     task_id: u64,
     weight: u64,
 ) -> Result<(), ContractError> {
-    let voted_key = DataKey::Voted(task_id, guardian.clone());
-    if env.storage().instance().has(&voted_key) {
-        return Err(ContractError::DuplicateVote);
+    let mut task = task::get_task(env, task_id).ok_or(ContractError::TaskNotFound)?;
+
+    if task.resolved {
+        return Err(ContractError::TaskAlreadyResolved);
     }
 
-    let mut t = match storage::get_active_task(env, task_id) {
-        Some(t) => t,
-        None => return Err(ContractError::TaskNotFound),
-    };
-
-    if t.is_cancelled {
-        return Err(ContractError::TaskCancelled);
+    if task::has_voted(env, task_id, guardian) {
+        return Err(ContractError::AlreadyVoted);
     }
+
+    task::record_vote(env, task_id, guardian);
+
+    task.votes_received = task.votes_received.saturating_add(1);
+    task.total_weight = task.total_weight.saturating_add(weight);
+
+    events::emit_weighted_vote_cast(env, task_id, guardian.clone(), weight);
 
     let weight_threshold: u64 = env
         .storage()
@@ -354,347 +390,361 @@ pub(crate) fn vote_inner(
         .get(&DataKey::WeightThreshold)
         .unwrap_or(DEFAULT_WEIGHT_THRESHOLD);
 
-    // Keep this transition delegated to the Kani-verified consensus module.
-    // Reimplementing it here could make the on-chain path diverge from the
-    // arithmetic proved in `verification/`; see
-    // [VERIFICATION_REPORT.md](../../VERIFICATION_REPORT.md).
-    let mut consensus_state = crate::consensus::ConsensusState {
-        total_weight_accrued: t.total_weight_accrued,
-        votes: t.votes,
-        is_done: t.is_done,
-    };
-    crate::consensus::apply_vote(&mut consensus_state, weight, weight_threshold).map_err(|e| {
-        match e {
-            crate::consensus::ConsensusError::WeightOverflow => ContractError::WeightOverflow,
-            crate::consensus::ConsensusError::ZeroWeight => ContractError::ZeroWeightVote,
-        }
-    })?;
-    t.total_weight_accrued = consensus_state.total_weight_accrued;
-    t.votes = consensus_state.votes;
+    let quorum_met = task.votes_received >= task.min_votes_required;
+    let weight_met = task.total_weight >= weight_threshold;
 
-    if consensus_state.is_done && t.votes >= t.min_votes_required && !t.is_done {
-        t.is_done = true;
-        t.resolved_at = env.ledger().timestamp();
-        events::emit_task_resolved(env, task_id, t.total_weight_accrued);
+    if quorum_met && weight_met {
+        task.resolved = true;
+        events::emit_task_resolved(env, task_id, task.total_weight);
 
-        if let Some(vault_addr) = env
-            .storage()
-            .instance()
-            .get::<_, Address>(&DataKey::VaultAddress)
-        {
+        if let Some(vault_addr) = storage::get_vault_address(env) {
             try_release_vault_funds(env, task_id, &vault_addr);
+        }
+
+        if let Some(reward_stream) = drips::get_reward_stream(env, task_id) {
+            drips::try_start_drips_stream(env, task_id, &reward_stream);
         }
     }
 
-    env.storage().instance().set(&voted_key, &true);
-    storage::append_task_voter(env, task_id, guardian);
-    storage::set_active_task(env, &t);
-
-    events::emit_weighted_vote(env, task_id, guardian, weight);
-
+    task::save_task(env, &task);
     Ok(())
 }
 
-/// Vote on multiple tasks in a single atomic transaction.
-/// Guardian-level checks (auth, guardian status, balance, reputation) are
-/// performed once. Per-task validation and state mutation uses `vote_inner`.
-/// If any task is invalid the entire batch is reverted (Soroban transactional
-/// semantics ensure atomicity).
+/// Atomically processes multiple task votes submitted by a guardian in a single batch.
+///
+/// Enforces reentrancy protection, verifies guardian authentication and voting power once,
+/// and sequentially applies [`vote_inner`] across all supplied task IDs.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `guardian` - Address of the guardian casting batch votes.
+/// * `task_ids` - Collection of task IDs to vote on.
+///
+/// # Errors
+/// * [`ContractError::ContractPaused`] - If contract is paused.
+/// * [`ContractError::GuardianNotFound`] - If voter is not a guardian.
+/// * [`ContractError::InvalidWeight`] - If guardian voting power is 0.
+/// * Any error returned by individual task voting in [`vote_inner`].
+///
+/// # Side Effects
+/// * Updates state for all voted tasks and emits associated events.
 pub(crate) fn process_vote_batch(
     env: &Env,
     guardian: Address,
     task_ids: Vec<u64>,
 ) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
+    reentrancy::enter(env)?;
+
     guardian.require_auth();
-    reentrancy::lock(env)?;
 
     if !guardian::is_guardian(env, &guardian) {
-        reentrancy::unlock(env);
-        return Err(ContractError::NotAuthorized);
+        reentrancy::exit(env);
+        return Err(ContractError::GuardianNotFound);
     }
 
-    let token_key = DataKey::TokenAddress;
-    if !env.storage().instance().has(&token_key) {
-        reentrancy::unlock(env);
-        return Err(ContractError::NotInitialized);
-    }
-
-    let threshold: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::LockThreshold)
-        .unwrap_or(0);
-    let balance_key = DataKey::LockedBalance(guardian.clone());
-    let locked_balance: i128 = env.storage().instance().get(&balance_key).unwrap_or(0);
-
-    if locked_balance <= threshold {
-        reentrancy::unlock(env);
-        return Err(ContractError::InsufficientLockedBalance);
-    }
-
-    let weight = match reputation::get_rep(env, &guardian) {
-        Ok(w) => w,
-        Err(e) => {
-            reentrancy::unlock(env);
-            return Err(e);
+    let weight = match reputation::calculate_voting_power(env, &guardian) {
+        Some(w) if w > 0 => w,
+        _ => {
+            reentrancy::exit(env);
+            return Err(ContractError::InvalidWeight);
         }
     };
 
-    if weight == 0 {
-        reentrancy::unlock(env);
-        return Err(ContractError::ZeroWeightVote);
-    }
-
-    for task_id in task_ids.iter() {
+    for i in 0..task_ids.len() {
+        let task_id = task_ids.get(i).unwrap();
         if let Err(e) = vote_inner(env, &guardian, task_id, weight) {
-            reentrancy::unlock(env);
+            reentrancy::exit(env);
             return Err(e);
         }
     }
 
-    reentrancy::unlock(env);
+    reentrancy::exit(env);
     Ok(())
 }
 
+/// Builds and returns a complete state snapshot of the contract.
+///
+/// Collects guardians, tasks, and reward streams into a [`Snapshot`] struct.
+/// Enforces `MAX_SNAPSHOT_COLLECTION_SIZE` limits on each collection to prevent
+/// transaction instruction budget exhaustion.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+///
+/// # Errors
+/// * [`ContractError::SnapshotCollectionTooLarge`] - If guardians, tasks, or streams count exceeds limit.
+///
+/// # Returns
+/// * `Ok(Snapshot)` containing all current protocol state, timestamp, and counts.
 pub(crate) fn get_snapshot(env: &Env) -> Result<Snapshot, ContractError> {
-    let timestamp = env.ledger().timestamp();
-    let paused = env
+    let raw_guardians: Vec<Address> = env
         .storage()
         .instance()
-        .get(&DataKey::Paused)
-        .unwrap_or(false);
-    let failure_count = env
+        .get(&DataKey::GuardiansList)
+        .unwrap_or_else(|| Vec::new(env));
+    if raw_guardians.len() > MAX_SNAPSHOT_COLLECTION_SIZE {
+        return Err(ContractError::SnapshotCollectionTooLarge);
+    }
+
+    let mut guardians = Vec::new(env);
+    for g in raw_guardians.iter() {
+        let is_active = guardian::is_guardian(env, &g);
+        let rep = reputation::get_reputation(env, &g).unwrap_or(0);
+        guardians.push_back(GuardianEntry {
+            address: g,
+            is_active,
+            reputation: rep,
+        });
+    }
+
+    let task_ids: Vec<u64> = env
         .storage()
         .instance()
-        .get(&DataKey::FailureCount)
-        .unwrap_or(0);
-    let weight_threshold = env
+        .get(&DataKey::TasksList)
+        .unwrap_or_else(|| Vec::new(env));
+    if task_ids.len() > MAX_SNAPSHOT_COLLECTION_SIZE {
+        return Err(ContractError::SnapshotCollectionTooLarge);
+    }
+
+    let mut tasks = Vec::new(env);
+    for id in task_ids.iter() {
+        if let Some(t) = task::get_task(env, id) {
+            tasks.push_back(t);
+        }
+    }
+
+    let reward_task_ids: Vec<u64> = env
         .storage()
         .instance()
-        .get(&DataKey::WeightThreshold)
-        .unwrap_or(DEFAULT_WEIGHT_THRESHOLD);
-    let admin = env.storage().instance().get(&DataKey::Admin);
-    let vault_address = env.storage().instance().get(&DataKey::VaultAddress);
-    let drips_address = env.storage().instance().get(&DataKey::DripsAddress);
-
-    let all_guardians = guardian::get_all_guardians(env);
-    let all_tasks = task::get_all_tasks(env);
-    let all_streams = drips::get_all_reward_streams(env);
-
-    // Bail out before doing any of the expensive per-entry work below: once a
-    // collection outgrows the ledger's practical per-transaction CPU budget,
-    // building the full snapshot atomically is no longer safe. Callers past
-    // this point should use the paginated API instead (see
-    // `MAX_SNAPSHOT_COLLECTION_SIZE`).
-    if all_guardians.len() > MAX_SNAPSHOT_COLLECTION_SIZE
-        || all_tasks.len() > MAX_SNAPSHOT_COLLECTION_SIZE
-        || all_streams.len() > MAX_SNAPSHOT_COLLECTION_SIZE
-    {
-        return Err(ContractError::SnapshotTooLarge);
+        .get(&DataKey::RewardStreamsList)
+        .unwrap_or_else(|| Vec::new(env));
+    if reward_task_ids.len() > MAX_SNAPSHOT_COLLECTION_SIZE {
+        return Err(ContractError::SnapshotCollectionTooLarge);
     }
 
-    let mut guardians = Map::new(env);
-    for g in all_guardians.iter() {
-        guardians.set(g.clone(), guardian::is_guardian(env, &g));
-    }
-
-    let mut reputations = Map::new(env);
-    for g in all_guardians.iter() {
-        if let Some(score) = reputation::get_reputation(env, &g) {
-            reputations.set(g.clone(), score);
+    let mut reward_streams = Vec::new(env);
+    for id in reward_task_ids.iter() {
+        if let Some(rs) = drips::get_reward_stream(env, id) {
+            reward_streams.push_back(rs);
         }
     }
 
-    let mut tasks = Map::new(env);
-    for t in all_tasks.iter() {
-        if let Some(task) = task::get_task(env, t) {
-            tasks.set(t, task);
-        }
-    }
+    let raw_reporters: Vec<Address> = env
+        .storage()
+        .instance()
+        .get(&DataKey::FailureReportersList)
+        .unwrap_or_else(|| Vec::new(env));
 
-    let mut votes = Map::new(env);
-    for t in all_tasks.iter() {
-        let task_id = t;
-        let task_voters = storage::get_task_voters(env, task_id);
-        for voter in task_voters.iter() {
-            votes.set((task_id, voter.clone()), true);
-        }
-    }
-
-    let mut reward_streams = Map::new(env);
-    for s in all_streams.iter() {
-        if let Some(stream) = drips::get_reward_stream(env, s) {
-            reward_streams.set(s, stream);
-        }
+    let mut failure_counts = Map::new(env);
+    for r in raw_reporters.iter() {
+        let count = circuit_breaker::get_reporter_failure_count(env, &r);
+        failure_counts.set(r, count);
     }
 
     Ok(Snapshot {
-        timestamp,
-        paused,
-        failure_count,
-        weight_threshold,
-        admin,
-        vault_address,
-        drips_address,
+        admin: storage::get_admin(env),
+        is_paused: circuit_breaker::is_paused(env),
         guardians,
-        reputations,
         tasks,
-        votes,
         reward_streams,
+        weight_threshold: storage::get_weight_threshold(env),
+        vault_address: storage::get_vault_address(env),
+        token_address: storage::get_token_address(env),
+        failure_count: circuit_breaker::get_failure_count(env),
+        failure_counts,
+        timestamp: env.ledger().timestamp(),
     })
 }
 
-/// O(1) snapshot header (plus collection counts). Always safe to call,
-/// regardless of total protocol size.
+/// Retrieves lightweight metadata about the current protocol state and collection sizes.
+///
+/// Useful for determining pagination bounds without loading entire collections into memory.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+///
+/// # Returns
+/// * [`SnapshotMeta`] struct with counts of guardians, tasks, reward streams, failure stats, and timestamp.
 pub(crate) fn get_snapshot_meta(env: &Env) -> SnapshotMeta {
+    let guardian_count = env
+        .storage()
+        .instance()
+        .get(&DataKey::GuardiansList)
+        .map(|list: Vec<Address>| list.len())
+        .unwrap_or(0);
+
+    let task_count = env
+        .storage()
+        .instance()
+        .get(&DataKey::TasksList)
+        .map(|list: Vec<u64>| list.len())
+        .unwrap_or(0);
+
+    let reward_stream_count = env
+        .storage()
+        .instance()
+        .get(&DataKey::RewardStreamsList)
+        .map(|list: Vec<u64>| list.len())
+        .unwrap_or(0);
+
     SnapshotMeta {
+        admin: storage::get_admin(env),
+        is_paused: circuit_breaker::is_paused(env),
+        guardian_count,
+        task_count,
+        reward_stream_count,
+        weight_threshold: storage::get_weight_threshold(env),
+        vault_address: storage::get_vault_address(env),
+        token_address: storage::get_token_address(env),
+        failure_count: circuit_breaker::get_failure_count(env),
         timestamp: env.ledger().timestamp(),
-        paused: env
-            .storage()
-            .instance()
-            .get(&DataKey::Paused)
-            .unwrap_or(false),
-        failure_count: env
-            .storage()
-            .instance()
-            .get(&DataKey::FailureCount)
-            .unwrap_or(0),
-        weight_threshold: env
-            .storage()
-            .instance()
-            .get(&DataKey::WeightThreshold)
-            .unwrap_or(DEFAULT_WEIGHT_THRESHOLD),
-        admin: env.storage().instance().get(&DataKey::Admin),
-        vault_address: env.storage().instance().get(&DataKey::VaultAddress),
-        drips_address: env.storage().instance().get(&DataKey::DripsAddress),
-        guardian_count: env
-            .storage()
-            .instance()
-            .get(&DataKey::GuardianIndexCount)
-            .unwrap_or(0),
-        task_count: env
-            .storage()
-            .instance()
-            .get(&DataKey::TaskIndexCount)
-            .unwrap_or(0),
-        reward_stream_count: drips::get_all_reward_streams(env).len(),
     }
 }
 
-/// Returns up to `limit` (capped at `MAX_PAGE_LIMIT`) guardians starting at
-/// `offset`, with their guardian status and reputation.
+/// Retrieves a paginated slice of registered guardians.
 ///
-/// Reads the dense `GuardianIndexAt` slot index maintained by
-/// `add_guardian`/`remove_guardian` rather than the full `AllGuardians`
-/// list, so this does `O(limit)` storage reads — not `O(total guardian
-/// count)` — and stays cheaply invokable at guardian counts where
-/// `get_snapshot` is capped out entirely (see `MAX_SNAPSHOT_COLLECTION_SIZE`
-/// and `tests/snapshot_scaling.rs`). Its absolute cost still carries a mild
-/// dependency on total instance-storage size, an inherent property of
-/// Soroban's shared-instance-ledger-entry storage model.
+/// Clamps `limit` to [`MAX_PAGE_LIMIT`] to maintain bounded compute cost.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `offset` - 0-based starting index within the guardians collection.
+/// * `limit` - Maximum number of entries to return (capped at `MAX_PAGE_LIMIT`).
+///
+/// # Returns
+/// * `Vec<GuardianEntry>` containing active status and reputation for each guardian in page.
 pub(crate) fn get_guardians_page(env: &Env, offset: u32, limit: u32) -> Vec<GuardianEntry> {
-    let limit = limit.min(MAX_PAGE_LIMIT);
-    let count: u32 = env
+    let raw_guardians: Vec<Address> = env
         .storage()
         .instance()
-        .get(&DataKey::GuardianIndexCount)
-        .unwrap_or(0);
-    let end = offset.saturating_add(limit).min(count);
+        .get(&DataKey::GuardiansList)
+        .unwrap_or_else(|| Vec::new(env));
 
-    let mut page = Vec::new(env);
-    let mut i = offset;
-    while i < end {
-        if let Some(g) = env
-            .storage()
-            .instance()
-            .get::<_, Address>(&DataKey::GuardianIndexAt(i))
-        {
-            let is_g = guardian::is_guardian(env, &g);
-            let reputation = reputation::get_reputation(env, &g);
-            page.push_back(GuardianEntry {
+    let effective_limit = limit.min(MAX_PAGE_LIMIT);
+    let total = raw_guardians.len();
+    let end = (offset.saturating_add(effective_limit)).min(total);
+
+    let mut result = Vec::new(env);
+    if offset >= total {
+        return result;
+    }
+
+    for i in offset..end {
+        if let Some(g) = raw_guardians.get(i) {
+            let is_active = guardian::is_guardian(env, &g);
+            let rep = reputation::get_reputation(env, &g).unwrap_or(0);
+            result.push_back(GuardianEntry {
                 address: g,
-                is_guardian: is_g,
-                reputation,
+                is_active,
+                reputation: rep,
             });
         }
-        i += 1;
     }
-    page
+    result
 }
 
-/// Returns up to `limit` (capped at `MAX_PAGE_LIMIT`) tasks starting at
-/// `offset`.
+/// Retrieves a paginated slice of registered tasks.
 ///
-/// Reads the dense `TaskIndexAt` slot index maintained by
-/// `register_tasks`/`purge_task` rather than the full `AllTasks` list, so
-/// this does `O(limit)` storage reads — not `O(total task count)` — and
-/// stays cheaply invokable at task counts where `get_snapshot` is capped out
-/// entirely. See `get_guardians_page` for the same caveat on absolute cost
-/// under Soroban's shared-instance-ledger-entry storage model.
+/// Clamps `limit` to [`MAX_PAGE_LIMIT`] to prevent execution budget overruns.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `offset` - 0-based starting index within the tasks collection.
+/// * `limit` - Maximum number of entries to return (capped at `MAX_PAGE_LIMIT`).
+///
+/// # Returns
+/// * `Vec<Task>` containing full task details for each task in the requested window.
 pub(crate) fn get_tasks_page(env: &Env, offset: u32, limit: u32) -> Vec<Task> {
-    let limit = limit.min(MAX_PAGE_LIMIT);
-    let count: u32 = env
+    let task_ids: Vec<u64> = env
         .storage()
         .instance()
-        .get(&DataKey::TaskIndexCount)
-        .unwrap_or(0);
-    let end = offset.saturating_add(limit).min(count);
+        .get(&DataKey::TasksList)
+        .unwrap_or_else(|| Vec::new(env));
 
-    let mut page = Vec::new(env);
-    let mut i = offset;
-    while i < end {
-        if let Some(id) = env
-            .storage()
-            .instance()
-            .get::<_, u64>(&DataKey::TaskIndexAt(i))
-        {
+    let effective_limit = limit.min(MAX_PAGE_LIMIT);
+    let total = task_ids.len();
+    let end = (offset.saturating_add(effective_limit)).min(total);
+
+    let mut result = Vec::new(env);
+    if offset >= total {
+        return result;
+    }
+
+    for i in offset..end {
+        if let Some(id) = task_ids.get(i) {
             if let Some(t) = task::get_task(env, id) {
-                page.push_back(t);
+                result.push_back(t);
             }
         }
-        i += 1;
     }
-    page
+    result
 }
 
-/// Returns up to `limit` (capped at `MAX_PAGE_LIMIT`) reward streams starting
-/// at `offset`.
+/// Retrieves a paginated slice of registered reward streams.
+///
+/// Clamps `limit` to [`MAX_PAGE_LIMIT`].
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `offset` - 0-based starting index within the reward streams collection.
+/// * `limit` - Maximum number of entries to return (capped at `MAX_PAGE_LIMIT`).
+///
+/// # Returns
+/// * `Vec<RewardStream>` containing active stream details in the requested range.
 pub(crate) fn get_reward_streams_page(env: &Env, offset: u32, limit: u32) -> Vec<RewardStream> {
-    let limit = limit.min(MAX_PAGE_LIMIT);
-    let all = drips::get_all_reward_streams(env);
-    let end = offset.saturating_add(limit).min(all.len());
-
-    let mut page = Vec::new(env);
-    let mut i = offset;
-    while i < end {
-        let id = all.get(i).unwrap();
-        if let Some(s) = drips::get_reward_stream(env, id) {
-            page.push_back(s);
-        }
-        i += 1;
-    }
-    page
-}
-
-pub(crate) fn record_snapshot(env: &Env) -> Result<(), ContractError> {
-    let snapshot = get_snapshot(env)?;
-    let timestamp = snapshot.timestamp;
-
-    let mut all_snapshots: soroban_sdk::Vec<u64> = env
+    let reward_task_ids: Vec<u64> = env
         .storage()
         .instance()
-        .get(&DataKey::AllSnapshots)
-        .unwrap_or(soroban_sdk::Vec::new(env));
-    all_snapshots.push_back(timestamp);
-    env.storage()
-        .instance()
-        .set(&DataKey::AllSnapshots, &all_snapshots);
+        .get(&DataKey::RewardStreamsList)
+        .unwrap_or_else(|| Vec::new(env));
 
+    let effective_limit = limit.min(MAX_PAGE_LIMIT);
+    let total = reward_task_ids.len();
+    let end = (offset.saturating_add(effective_limit)).min(total);
+
+    let mut result = Vec::new(env);
+    if offset >= total {
+        return result;
+    }
+
+    for i in offset..end {
+        if let Some(id) = reward_task_ids.get(i) {
+            if let Some(rs) = drips::get_reward_stream(env, id) {
+                result.push_back(rs);
+            }
+        }
+    }
+    result
+}
+
+/// Records a full state snapshot into historical storage indexed by timestamp.
+///
+/// Validates that collection sizes are within [`MAX_SNAPSHOT_COLLECTION_SIZE`], saves
+/// the snapshot under [`DataKey::SnapshotAt`], and appends the timestamp to [`DataKey::SnapshotTimestamps`].
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+///
+/// # Errors
+/// * [`ContractError::SnapshotCollectionTooLarge`] - If any collection exceeds maximum snapshot capacity.
+///
+/// # Side Effects
+/// * Writes timestamped snapshot and updates history index in contract instance storage.
+pub(crate) fn record_snapshot(env: &Env) -> Result<(), ContractError> {
+    let snap = get_snapshot(env)?;
+    let ts = snap.timestamp;
+
+    env.storage().instance().set(&DataKey::SnapshotAt(ts), &snap);
+
+    let mut history: soroban_sdk::Vec<u64> = env
+        .storage()
+        .instance()
+        .get(&DataKey::SnapshotTimestamps)
+        .unwrap_or_else(|| soroban_sdk::Vec::new(env));
+    history.push_back(ts);
     env.storage()
         .instance()
-        .set(&DataKey::Snapshot(timestamp), &snapshot);
-    events::emit_snapshot_recorded(env, timestamp);
+        .set(&DataKey::SnapshotTimestamps, &history);
 
     Ok(())
 }

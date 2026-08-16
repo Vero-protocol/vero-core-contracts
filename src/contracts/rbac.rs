@@ -3,6 +3,14 @@ use crate::types::{ContractError, DataKey, Role};
 use soroban_sdk::{Address, Env};
 
 /// Check whether an address holds a specific role.
+///
+/// Looks up `DataKey::RoleAssignment(address, role)` in instance storage.
+/// Returns `true` if the role assignment exists and is set to `true`, `false` otherwise.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `address` - Target address being queried for role possession.
+/// * `role` - The specific [`Role`] variant to check.
 pub fn has_role(env: &Env, address: &Address, role: Role) -> bool {
     let key = DataKey::RoleAssignment(address.clone(), role);
     env.storage().instance().get(&key).unwrap_or(false)
@@ -10,6 +18,17 @@ pub fn has_role(env: &Env, address: &Address, role: Role) -> bool {
 
 /// Require that the caller holds a specific role, or revert with Unauthorized.
 /// This is the "modifier" equivalent used at the start of privileged functions.
+///
+/// Calls `caller.require_auth()` to verify transaction signature/authorization,
+/// then verifies role assignment via [`has_role`].
+///
+/// # Errors
+/// * [`ContractError::NotAuthorized`] - Returned if caller lacks the requested role.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `caller` - Caller address executing the privileged operation.
+/// * `role` - The required [`Role`].
 pub fn require_role(env: &Env, caller: &Address, role: Role) -> Result<(), ContractError> {
     caller.require_auth();
     if !has_role(env, caller, role) {
@@ -24,6 +43,10 @@ pub fn require_role(env: &Env, caller: &Address, role: Role) -> Result<(), Contr
 /// Note: Soroban storage does not support reverse lookups, so this function
 /// checks a known set of addresses that could potentially hold roles.
 /// For the Admin role, we maintain a small set of known role holders.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `role` - The [`Role`] whose total active assignees should be counted.
 pub fn count_role_holders(env: &Env, role: Role) -> u32 {
     // For now, we scan all guardians + the stored admin address as potential role holders.
     // This is acceptable because:
@@ -59,6 +82,18 @@ pub fn count_role_holders(env: &Env, role: Role) -> u32 {
 }
 
 /// Grant a role to a target address. Only callable by Admin role holders.
+///
+/// Sets `DataKey::RoleAssignment(target, role)` to `true` in instance storage
+/// and emits a `RoleGranted` event.
+///
+/// # Errors
+/// * [`ContractError::NotAuthorized`] - Returned if caller is not an Admin or fails auth.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `caller` - Admin address granting the role.
+/// * `target` - Target address receiving the role.
+/// * `role` - The [`Role`] to assign.
 pub fn grant_role_internal(
     env: &Env,
     caller: &Address,
@@ -77,6 +112,19 @@ pub fn grant_role_internal(
 
 /// Revoke a role from a target address. Only callable by Admin role holders.
 /// Prevents removal of the last Admin role holder to avoid lockout.
+///
+/// Removes `DataKey::RoleAssignment(target, role)` from instance storage
+/// and emits a `RoleRevoked` event.
+///
+/// # Errors
+/// * [`ContractError::NotAuthorized`] - Returned if caller is not an Admin or fails auth.
+/// * [`ContractError::LastAdminRemovalBlocked`] - Returned if attempting to revoke the last remaining Admin.
+///
+/// # Arguments
+/// * `env` - Reference to the Soroban environment.
+/// * `caller` - Admin address executing the revocation.
+/// * `target` - Target address having the role removed.
+/// * `role` - The [`Role`] to revoke.
 pub fn revoke_role_internal(
     env: &Env,
     caller: &Address,

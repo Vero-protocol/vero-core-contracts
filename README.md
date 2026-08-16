@@ -45,32 +45,18 @@ On-chain GitHub PR verification for the Stellar ecosystem. Guardians — trusted
 
 ## Modules
 
-
-| Module | Responsibility |
-|---|---|
-| `types` | `Task`, `DataKey`, `ContractError`, `RewardStream` |
-| `guardian` | Guardian registry with TTL-extended instance storage |
-| `task` | Task registration and retrieval |
-| `reputation` | Guardian reputation scores and voting power calculation |
+| Module            | Responsibility                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| `types`           | `Task`, `DataKey`, `ContractError`, `RewardStream`                                                |
+| `guardian`        | Guardian registry with TTL-extended instance storage                                              |
+| `task`            | Task registration and retrieval                                                                   |
+| `reputation`      | Guardian reputation scores and voting power calculation                                           |
 | `circuit_breaker` | Emergency halt + DoS-resistant failure reporting: `require_not_paused`, `record_failure`, `reset` |
-| `reentrancy` | Mutex lock/unlock guarding `vote` and `register_task` |
-| `drips` | Cross-contract reward stream initiation via Drips protocol |
-| `vault` | Cross-contract escrow release on task resolution |
-| `events` | On-chain event emission |
-| `lib` | Public contract surface and `vote` orchestration |
-
-| Module            | Responsibility                                                  |
-| ----------------- | --------------------------------------------------------------- |
-| `types`           | `Task`, `DataKey`, `ContractError`, `RewardStream`              |
-| `guardian`        | Guardian registry with TTL-extended instance storage            |
-| `task`            | Task registration and retrieval                                 |
-| `reputation`      | Guardian reputation scores and voting power calculation         |
-| `circuit_breaker` | Emergency halt: `require_not_paused`, `record_failure`, `reset` |
-| `reentrancy`      | Mutex lock/unlock guarding `vote` and `register_task`           |
-| `drips`           | Cross-contract reward stream initiation via Drips protocol      |
-| `vault`           | Cross-contract escrow release on task resolution                |
-| `events`          | On-chain event emission                                         |
-| `lib`             | Public contract surface and `vote` orchestration                |
+| `reentrancy`      | Mutex lock/unlock guarding `vote` and `register_task`                                             |
+| `drips`           | Cross-contract reward stream initiation via Drips protocol                                        |
+| `vault`           | Cross-contract escrow release on task resolution                                                  |
+| `events`          | On-chain event emission                                                                           |
+| `lib`             | Public contract surface and `vote` orchestration                                                  |
 
 
 ---
@@ -363,7 +349,6 @@ of generating distinct values.
 2. **Verify** — Call `is_paused()` on-chain to confirm the contract is frozen,
    and `get_failure_reporters()` to see who reported.
 3. **Investigate** — Audit storage state and transaction history off-chain.
-
 4. **Remediate** — Deploy a patched WASM via `upgrade_contract` if needed. If the
    reports were spam, enable `set_trusted_reporters_only(&admin, &true)`.
 5. **Resume** — Call `reset_circuit_breaker` (resets counter, clears per-reporter
@@ -371,15 +356,11 @@ of generating distinct values.
 
 > **Security note:** Only `EmergencyManager` role holders can call `pause`,
 > `unpause`, `reset_circuit_breaker`, and `set_trusted_reporters_only`. The
-> `record_failure` entry point stays open to any observer, but it is
-> authenticated, rate-limited, quota-capped and quorum-gated — a single address
-> cannot pause the contract, and reports can never manipulate task or guardian
-> state.
-
-4. **Remediate** — Deploy a patched WASM via `upgrade_contract` if needed.
-5. **Resume** — Call `reset_circuit_breaker` (resets counter + unpauses) or `unpause` if the failure counter was not the trigger.
-
-> **Security note:** Only addresses holding the `Role::EmergencyManager` role can call `pause`, `unpause`, and `reset_circuit_breaker`. The `grant_role` call to assign EmergencyManager itself requires `Role::Admin`, ensuring role delegation is strictly controlled. The `record_failure` entry point is permissionless so that any observer can report failures, but it only increments a counter — it cannot directly manipulate task or guardian state.
+> `grant_role` call to assign EmergencyManager itself requires `Role::Admin`,
+> ensuring role delegation is strictly controlled. The `record_failure` entry
+> point stays open to any observer, but it is authenticated, rate-limited,
+> quota-capped and quorum-gated — a single address cannot pause the contract, and
+> reports can never manipulate task or guardian state.
 
 
 ---

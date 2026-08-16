@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Community Discussions
+    url: https://github.com/Vero-protocol/vero-core-contracts/discussions
+    about: Please ask questions and discuss ideas here.

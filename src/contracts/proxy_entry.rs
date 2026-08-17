@@ -7,7 +7,7 @@ use crate::types::{
 };
 use crate::DEFAULT_WEIGHT_THRESHOLD;
 use crate::{circuit_breaker, drips, events, guardian, reputation, storage, task};
-use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, Vec};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec};
 
 /// The main entrypoint for the Vero Core contract.
 ///
@@ -21,9 +21,13 @@ fn is_strictly_sorted_addresses(addrs: &Vec<Address>) -> bool {
         return true;
     }
 
+    // SAFETY: this line is only reached when `addrs.len() >= 2`, so index 0
+    // is always in range and `get(0)` is provably `Some`.
     let mut prev = addrs.get(0).unwrap();
     let mut i = 1;
     while i < addrs.len() {
+        // SAFETY: the loop condition guarantees `i < addrs.len()`, so
+        // `get(i)` is provably `Some`. Proven-safe invariant.
         let current = addrs.get(i).unwrap();
         if prev >= current {
             return false;
@@ -224,19 +228,18 @@ impl VeroContract {
             .unwrap_or(DEFAULT_WEIGHT_THRESHOLD)
     }
 
-    pub fn set_vault_address(env: Env, admin: Address, vault: Address) {
-        if validate_address(&env, &admin).is_err() {
-            panic_with_error!(env, ContractError::InvalidAddress);
-        }
-        if validate_address(&env, &vault).is_err() {
-            panic_with_error!(env, ContractError::InvalidAddress);
-        }
-        circuit_breaker::require_not_paused(&env).unwrap();
-        // Use try-catch pattern via unwrap since this function has no Result return
-        crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::ConfigManager)
-            .unwrap();
+    pub fn set_vault_address(
+        env: Env,
+        admin: Address,
+        vault: Address,
+    ) -> Result<(), ContractError> {
+        validate_address(&env, &admin)?;
+        validate_address(&env, &vault)?;
+        circuit_breaker::require_not_paused(&env)?;
+        crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::ConfigManager)?;
         env.storage().instance().set(&DataKey::VaultAddress, &vault);
         events::emit_vault_set(&env, &admin, &vault);
+        Ok(())
     }
 
     pub fn set_fee_bps(env: Env, admin: Address, bps: u32) -> Result<(), ContractError> {
@@ -438,14 +441,17 @@ impl VeroContract {
         crate::gas::get_estimated_cost(op)
     }
 
-    pub fn upgrade_contract(env: Env, admin: Address, new_wasm_hash: BytesN<32>) {
-        if validate_address(&env, &admin).is_err() {
-            panic_with_error!(env, ContractError::InvalidAddress);
-        }
-        crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::Admin).unwrap();
+    pub fn upgrade_contract(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        validate_address(&env, &admin)?;
+        crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::Admin)?;
         env.deployer()
             .update_current_contract_wasm(new_wasm_hash.clone());
         events::emit_contract_upgraded(&env, &admin, &new_wasm_hash);
+        Ok(())
     }
 
     // ─── Multi-sig upgrade management ────────────────────────────────────────
@@ -831,7 +837,7 @@ impl VeroContract {
                     Self::set_weight_threshold(env.clone(), admin, threshold)?
                 }
                 BatchCall::SetVaultAddress(admin, vault) => {
-                    Self::set_vault_address(env.clone(), admin, vault)
+                    Self::set_vault_address(env.clone(), admin, vault)?
                 }
                 BatchCall::SetUpgradeSigners(admin, signers, threshold) => {
                     Self::set_upgrade_signers(env.clone(), admin, signers, threshold)?

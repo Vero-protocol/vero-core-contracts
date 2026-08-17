@@ -100,6 +100,11 @@ pub fn remove_guardian(env: &Env, admin: Address, guardian: Address) -> Result<(
         if count > 0 {
             let last_slot = count - 1;
             if slot != last_slot {
+                // SAFETY: `add_guardian` writes `GuardianIndexAt(slot)` for
+                // every slot in `0..count`, and `remove_guardian` keeps the
+                // index dense via swap-remove, so when `count > 0` the slot
+                // `last_slot = count - 1` is always populated. Proven-safe
+                // invariant.
                 let last_addr: Address = env
                     .storage()
                     .instance()

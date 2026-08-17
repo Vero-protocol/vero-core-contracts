@@ -5,3 +5,4 @@ lib/
 test_snapshots/
 target/
 Cargo.lock
+coverage/

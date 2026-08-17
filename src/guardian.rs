@@ -3,14 +3,14 @@
 use soroban_sdk::{Address, Env, Vec};
 
 use crate::types::{ContractError, DataKey};
-use crate::validation;
 
 const LEDGER_TTL: u32 = 100_000;
 
 /// Adds a new guardian to the contract.
-pub fn add_guardian(env: &Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
-    validation::validate_guardian_config(env, &admin, &guardian)?;
-
+///
+/// Address validation (`admin`, `guardian`) is performed by the calling
+/// entrypoint; this helper must not repeat it.
+pub fn add_guardian(env: &Env, _admin: Address, guardian: Address) -> Result<(), ContractError> {
     let key = DataKey::Guardian(guardian.clone());
     if env.storage().instance().has(&key) {
         return Err(ContractError::DuplicateGuardian);
@@ -56,10 +56,10 @@ pub fn add_guardian(env: &Env, admin: Address, guardian: Address) -> Result<(), 
 }
 
 /// Removes an existing guardian from the contract.
-pub fn remove_guardian(env: &Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
-    validation::validate_admin_address(env, &admin)?;
-    validation::validate_external_address(env, &guardian)?;
-
+///
+/// Address validation (`admin`, `guardian`) is performed by the calling
+/// entrypoint; this helper must not repeat it.
+pub fn remove_guardian(env: &Env, _admin: Address, guardian: Address) -> Result<(), ContractError> {
     let key = DataKey::Guardian(guardian.clone());
     if !env.storage().instance().has(&key) {
         return Err(ContractError::NotGuardian);

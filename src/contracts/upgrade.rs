@@ -7,9 +7,9 @@
 //! to the functions here; the exported contract API is unchanged.
 
 use crate::contracts::rbac::require_role;
-use crate::contracts::validate_address;
 use crate::events;
 use crate::types::{ContractError, DataKey, Role};
+use crate::validation::validate_external_address as validate_address;
 use soroban_sdk::{panic_with_error, Address, BytesN, Env, Vec};
 
 /// Returns `true` iff `addrs` is strictly ordered, i.e. every address is

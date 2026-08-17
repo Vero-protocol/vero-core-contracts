@@ -9,6 +9,10 @@ pub const MIN_REPUTATION_THRESHOLD: u64 = 100;
 
 /// Sets the reputation score for a guardian. Only callable by admin.
 ///
+/// Address validation (`admin`, `guardian`) and the GuardianManager role
+/// check are performed by the calling entrypoint; this helper must not
+/// repeat them.
+///
 /// # Arguments
 /// * `env` - The contract environment.
 /// * `admin` - The admin address (must pass `require_auth`).
@@ -16,13 +20,11 @@ pub const MIN_REPUTATION_THRESHOLD: u64 = 100;
 /// * `score` - The u64 reputation score to assign.
 pub fn set_reputation(
     env: &Env,
-    admin: Address,
+    _admin: Address,
     guardian: Address,
     score: u64,
 ) -> Result<(), ContractError> {
-    validation::validate_guardian_config(env, &admin, &guardian)?;
     validation::validate_reputation_score(score)?;
-    crate::contracts::rbac::require_role(env, &admin, crate::types::Role::GuardianManager)?;
 
     if !guardian::is_guardian(env, &guardian) {
         return Err(ContractError::NotGuardian);

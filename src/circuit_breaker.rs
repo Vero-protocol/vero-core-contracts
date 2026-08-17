@@ -40,7 +40,6 @@ use soroban_sdk::{Address, Env, Vec};
 
 use crate::events;
 use crate::types::{ContractError, DataKey, Role};
-use crate::validation;
 
 /// Cumulative failure reports required before the breaker may trip.
 pub const FAILURE_THRESHOLD: u32 = 50;
@@ -162,20 +161,20 @@ pub fn failure_count(env: &Env) -> u32 {
 ///   [`REPORT_COOLDOWN_LEDGERS`] ledgers ago.
 /// * [`ContractError::ReporterQuotaExceeded`] — caller already used its window quota.
 pub fn record_failure(env: &Env, reporter: Address) -> Result<(), ContractError> {
-    // 1. Address sanity (rejects the zero address and self-calls).
-    validation::validate_external_address(env, &reporter)?;
+    // Address validation (zero-address + self-contract) is performed by the
+    // calling entrypoint; we do not repeat it here.
 
-    // 2. Authenticate the reporter. Reports are attributable from here on.
+    // 1. Authenticate the reporter. Reports are attributable from here on.
     reporter.require_auth();
 
-    // 3. Optional trusted-monitor gating.
+    // 2. Optional trusted-monitor gating.
     if trusted_reporters_only(env) && !is_trusted_reporter(env, &reporter) {
         return Err(ContractError::UnauthorizedReporter);
     }
 
     let current_ledger = env.ledger().sequence();
 
-    // 4. Per-reporter cooldown. Within a single transaction the ledger sequence
+    // 3. Per-reporter cooldown. Within a single transaction the ledger sequence
     //    does not change, so a loop of calls is rejected after the first one.
     if let Some(last) = last_report_ledger(env, &reporter) {
         if current_ledger.saturating_sub(last) < REPORT_COOLDOWN_LEDGERS {
@@ -183,13 +182,13 @@ pub fn record_failure(env: &Env, reporter: Address) -> Result<(), ContractError>
         }
     }
 
-    // 5. Per-reporter quota for the current breaker window.
+    // 4. Per-reporter quota for the current breaker window.
     let reports_by_caller = reporter_count(env, &reporter);
     if reports_by_caller >= MAX_REPORTS_PER_REPORTER {
         return Err(ContractError::ReporterQuotaExceeded);
     }
 
-    // 6. Track the reporter in the distinct-reporter index (bounded).
+    // 5. Track the reporter in the distinct-reporter index (bounded).
     let mut reporters = failure_reporters(env);
     let is_new_reporter = !reporters.contains(reporter.clone());
     if is_new_reporter {
@@ -202,7 +201,7 @@ pub fn record_failure(env: &Env, reporter: Address) -> Result<(), ContractError>
             .set(&DataKey::FailureReporters, &reporters);
     }
 
-    // 7. Commit the report.
+    // 6. Commit the report.
     env.storage().instance().set(
         &DataKey::LastFailureReport(reporter.clone()),
         &current_ledger,
@@ -217,7 +216,7 @@ pub fn record_failure(env: &Env, reporter: Address) -> Result<(), ContractError>
 
     events::emit_failure_reported(env, &reporter, count);
 
-    // 8. Quorum-gated auto-pause: enough failures AND enough independent
+    // 7. Quorum-gated auto-pause: enough failures AND enough independent
     //    reporters. A single address can never satisfy both.
     let distinct_reporters = reporters.len();
     if count > FAILURE_THRESHOLD && distinct_reporters >= MIN_DISTINCT_REPORTERS && !is_paused(env)
@@ -230,10 +229,9 @@ pub fn record_failure(env: &Env, reporter: Address) -> Result<(), ContractError>
 }
 
 /// Resets the failure counter, clears all per-reporter accounting and unpauses
-/// the contract. Authorization is enforced by the calling entry point.
-pub fn reset(env: &Env, admin: soroban_sdk::Address) -> Result<(), ContractError> {
-    validation::validate_admin_address(env, &admin)?;
-
+/// the contract. Authorization is enforced by the calling entry point;
+/// address validation is not repeated here.
+pub fn reset(env: &Env, _admin: soroban_sdk::Address) -> Result<(), ContractError> {
     // Clear per-reporter state so the next window starts clean.
     for reporter in failure_reporters(env).iter() {
         env.storage()

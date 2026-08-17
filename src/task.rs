@@ -17,6 +17,9 @@ fn is_terminal(task: &Task) -> bool {
 const MAX_REGISTER_TASK_BATCH_SIZE: u32 = 32;
 
 /// Registers a batch of new voting tasks in the contract storage.
+///
+/// Address validation (`admin`) is performed by the calling entrypoint;
+/// this helper must not repeat it.
 pub fn register_tasks(
     env: &Env,
     admin: Address,
@@ -26,8 +29,6 @@ pub fn register_tasks(
     if task_ids.is_empty() || task_ids.len() > MAX_REGISTER_TASK_BATCH_SIZE {
         return Err(ContractError::BatchTooLarge);
     }
-
-    validation::validate_admin_address(env, &admin)?;
 
     let mut seen_task_ids = Vec::new(env);
     for task_id in task_ids.iter() {
@@ -97,8 +98,11 @@ pub fn register_tasks(
     Ok(())
 }
 
-pub fn cancel_task(env: &Env, admin: Address, task_id: u64) -> Result<(), ContractError> {
-    validation::validate_admin_address(env, &admin)?;
+/// Cancels an active task.
+///
+/// Address validation (`admin`) is performed by the calling entrypoint;
+/// this helper must not repeat it.
+pub fn cancel_task(env: &Env, _admin: Address, task_id: u64) -> Result<(), ContractError> {
     validation::validate_task_id(task_id)?;
 
     let mut task = storage::get_active_task(env, task_id).ok_or(ContractError::TaskNotFound)?;

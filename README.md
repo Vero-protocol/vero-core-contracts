@@ -49,6 +49,7 @@ On-chain GitHub PR verification for the Stellar ecosystem. Guardians — trusted
 | ----------------- | ------------------------------------------------------------------------------------------------- |
 | `types`           | `Task`, `DataKey`, `ContractError`, `RewardStream`                                                |
 | `guardian`        | Guardian registry with TTL-extended instance storage                                              |
+| `limits`          | Single source of truth for protocol size/limit constants                                          |
 | `task`            | Task registration and retrieval                                                                   |
 | `reputation`      | Guardian reputation scores and voting power calculation                                           |
 | `circuit_breaker` | Emergency halt + DoS-resistant failure reporting: `require_not_paused`, `record_failure`, `reset` |

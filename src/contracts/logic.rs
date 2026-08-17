@@ -3,8 +3,8 @@ use crate::types::{
 };
 use crate::DEFAULT_WEIGHT_THRESHOLD;
 use crate::{
-    circuit_breaker, drips, events, guardian, reentrancy, reputation, storage, task, timelock,
-    vault,
+    circuit_breaker, drips, events, guardian, limits, reentrancy, reputation, storage, task,
+    timelock, vault,
 };
 use soroban_sdk::{Address, Env, Map, Vec};
 
@@ -27,29 +27,6 @@ pub(crate) fn try_release_vault_funds(env: &Env, task_id: u64, vault_addr: &Addr
         }
     }
 }
-
-/// Maximum number of entries `get_snapshot`/`record_snapshot` will read from
-/// any single tracked collection (guardians, tasks, reward streams) before
-/// refusing to build a snapshot.
-///
-/// Building a full snapshot costs roughly 2 storage reads per guardian
-/// (guardian flag + reputation), 2+ reads per task (task struct + its voter
-/// list), and 2 reads per reward stream. At `MAX_SNAPSHOT_COLLECTION_SIZE`
-/// entries per collection that stays comfortably inside Soroban's
-/// per-transaction CPU instruction budget with wide margin — see the
-/// growth-curve measurements in `tests/snapshot_scaling.rs`. Once a
-/// collection approaches this ceiling, callers should switch to the
-/// paginated API (`get_snapshot_meta` + `get_guardians_page` +
-/// `get_tasks_page` + `get_reward_streams_page`), which reads at most
-/// `O(limit)` entries per call — not `O(total collection size)` — and stays
-/// cheaply invokable well past the point this cap would refuse to build a
-/// full snapshot.
-pub(crate) const MAX_SNAPSHOT_COLLECTION_SIZE: u32 = 200;
-
-/// Maximum number of entries any paginated snapshot call will return,
-/// regardless of the caller-requested `limit`. Keeps a single page call's
-/// cost bounded even against a hostile/misconfigured caller.
-pub(crate) const MAX_PAGE_LIMIT: u32 = 50;
 
 pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
@@ -487,9 +464,9 @@ pub(crate) fn get_snapshot(env: &Env) -> Result<Snapshot, ContractError> {
     // building the full snapshot atomically is no longer safe. Callers past
     // this point should use the paginated API instead (see
     // `MAX_SNAPSHOT_COLLECTION_SIZE`).
-    if all_guardians.len() > MAX_SNAPSHOT_COLLECTION_SIZE
-        || all_tasks.len() > MAX_SNAPSHOT_COLLECTION_SIZE
-        || all_streams.len() > MAX_SNAPSHOT_COLLECTION_SIZE
+    if all_guardians.len() > limits::MAX_SNAPSHOT_COLLECTION_SIZE
+        || all_tasks.len() > limits::MAX_SNAPSHOT_COLLECTION_SIZE
+        || all_streams.len() > limits::MAX_SNAPSHOT_COLLECTION_SIZE
     {
         return Err(ContractError::SnapshotTooLarge);
     }
@@ -594,7 +571,7 @@ pub(crate) fn get_snapshot_meta(env: &Env) -> SnapshotMeta {
 /// dependency on total instance-storage size, an inherent property of
 /// Soroban's shared-instance-ledger-entry storage model.
 pub(crate) fn get_guardians_page(env: &Env, offset: u32, limit: u32) -> Vec<GuardianEntry> {
-    let limit = limit.min(MAX_PAGE_LIMIT);
+    let limit = limit.min(limits::MAX_PAGE_LIMIT);
     let count: u32 = env
         .storage()
         .instance()
@@ -633,7 +610,7 @@ pub(crate) fn get_guardians_page(env: &Env, offset: u32, limit: u32) -> Vec<Guar
 /// entirely. See `get_guardians_page` for the same caveat on absolute cost
 /// under Soroban's shared-instance-ledger-entry storage model.
 pub(crate) fn get_tasks_page(env: &Env, offset: u32, limit: u32) -> Vec<Task> {
-    let limit = limit.min(MAX_PAGE_LIMIT);
+    let limit = limit.min(limits::MAX_PAGE_LIMIT);
     let count: u32 = env
         .storage()
         .instance()
@@ -661,7 +638,7 @@ pub(crate) fn get_tasks_page(env: &Env, offset: u32, limit: u32) -> Vec<Task> {
 /// Returns up to `limit` (capped at `MAX_PAGE_LIMIT`) reward streams starting
 /// at `offset`.
 pub(crate) fn get_reward_streams_page(env: &Env, offset: u32, limit: u32) -> Vec<RewardStream> {
-    let limit = limit.min(MAX_PAGE_LIMIT);
+    let limit = limit.min(limits::MAX_PAGE_LIMIT);
     let all = drips::get_all_reward_streams(env);
     let end = offset.saturating_add(limit).min(all.len());
 

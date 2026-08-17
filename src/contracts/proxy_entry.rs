@@ -1,10 +1,10 @@
 #![allow(missing_docs)]
 
 use crate::contracts::logic;
-use crate::contracts::validate_address;
 use crate::types::{
     BatchCall, ContractError, DataKey, GuardianEntry, RewardStream, Snapshot, SnapshotMeta, Task,
 };
+use crate::validation::validate_external_address as validate_address;
 use crate::DEFAULT_WEIGHT_THRESHOLD;
 use crate::{circuit_breaker, drips, events, guardian, reputation, storage, task};
 use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, Vec};
@@ -151,6 +151,7 @@ impl VeroContract {
         validate_address(&env, &admin)?;
         validate_address(&env, &guardian)?;
         circuit_breaker::require_not_paused(&env)?;
+        crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::GuardianManager)?;
         reputation::set_reputation(&env, admin.clone(), guardian.clone(), score)?;
         events::emit_reputation_set(&env, &admin, &guardian, score);
         Ok(())

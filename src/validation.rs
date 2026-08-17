@@ -30,16 +30,6 @@ pub fn validate_admin_address(env: &Env, admin: &Address) -> Result<(), Contract
     validate_external_address(env, admin)
 }
 
-pub fn validate_guardian_config(
-    env: &Env,
-    admin: &Address,
-    guardian: &Address,
-) -> Result<(), ContractError> {
-    validate_admin_address(env, admin)?;
-    validate_external_address(env, guardian)?;
-    validate_distinct_addresses(admin, guardian)
-}
-
 pub fn validate_reward_stream_config(
     env: &Env,
     drips_address: &Address,

@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Task Archiving RBAC**: `archive_task` now requires the TaskManager role (#179)
 - **Bounded Snapshot API**: `get_snapshot`/`record_snapshot` are cost-bounded with a paginated snapshot metadata API (#182)
 - **Formal Verification**: full K-framework formal verification setup for consensus invariants (#108)
-- **Testing**: gas-budget assertions for high-traffic operations, proptest property tests for consensus invariants, and end-to-end happy-path integration test (#181, #259, #188)
+- **Testing**: gas-budget assertions for high-traffic operations, proptest property tests for consensus invariants, task-resolution regression test, and end-to-end happy-path integration test (#181, #187, #259, #188)
 - **Issue Templates**: bug report, feature request, and good-first-issue templates (#253)
 
 ### Changed

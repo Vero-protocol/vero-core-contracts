@@ -10,7 +10,7 @@ use crate::contracts::rbac::require_role;
 use crate::events;
 use crate::types::{ContractError, DataKey, Role};
 use crate::validation::validate_external_address as validate_address;
-use soroban_sdk::{panic_with_error, Address, BytesN, Env, Vec};
+use soroban_sdk::{Address, BytesN, Env, Vec};
 
 /// Returns `true` iff `addrs` is strictly ordered, i.e. every address is
 /// strictly greater than its predecessor (with no duplicates).
@@ -21,9 +21,13 @@ fn is_strictly_sorted_addresses(addrs: &Vec<Address>) -> bool {
         return true;
     }
 
+    // SAFETY: this line is only reached when `addrs.len() >= 2`, so index 0
+    // is always in range and `get(0)` is provably `Some`.
     let mut prev = addrs.get(0).unwrap();
     let mut i = 1;
     while i < addrs.len() {
+        // SAFETY: the loop condition guarantees `i < addrs.len()`, so
+        // `get(i)` is provably `Some`. Proven-safe invariant.
         let current = addrs.get(i).unwrap();
         if prev >= current {
             return false;
@@ -41,14 +45,21 @@ fn is_strictly_sorted_addresses(addrs: &Vec<Address>) -> bool {
 /// This is the single-admin upgrade path; the multi-sig flow below
 /// (`set_upgrade_signers` / `propose_upgrade` / `approve_upgrade` /
 /// `execute_upgrade`) offers the quorum-gated alternative.
-pub fn upgrade_contract(env: Env, admin: Address, new_wasm_hash: BytesN<32>) {
-    if validate_address(&env, &admin).is_err() {
-        panic_with_error!(env, ContractError::InvalidAddress);
-    }
-    require_role(&env, &admin, Role::Admin).unwrap();
+///
+/// # Errors
+/// * `InvalidAddress` — the admin is the zero address or the contract itself.
+/// * `NotAuthorized` — the caller does not hold the `Admin` role.
+pub fn upgrade_contract(
+    env: Env,
+    admin: Address,
+    new_wasm_hash: BytesN<32>,
+) -> Result<(), ContractError> {
+    validate_address(&env, &admin)?;
+    require_role(&env, &admin, Role::Admin)?;
     env.deployer()
         .update_current_contract_wasm(new_wasm_hash.clone());
     events::emit_contract_upgraded(&env, &admin, &new_wasm_hash);
+    Ok(())
 }
 
 /// Configure the list of authorized upgrade signers and the required quorum.

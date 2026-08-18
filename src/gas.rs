@@ -18,6 +18,14 @@ use crate::types::Operation;
 // All figures are in instruction units, which map 1-to-1 to the `fee_per_instruction_increment`
 // ledger base-fee calculation used by Stellar's fee schedule.
 
+/// Upper bound on the total estimated instruction cost of a single
+/// `batch_execute` call. Mirrors the protocol's per-transaction CPU
+/// instruction budget (100M instructions), so any batch whose summed
+/// `get_estimated_cost` stays under this ceiling is guaranteed to fit within
+/// one transaction. `batch_execute` rejects larger batches with
+/// `ContractError::BatchTooLarge`.
+pub const MAX_BATCH_EXECUTE_COST: u64 = 100_000_000;
+
 /// `register_task`: base + reentrancy lock write + has() check + role check + task write + index write + unlock write + event.
 /// `500_000 + 150_000 + 50_000 + 50_000 + 150_000 + 150_000 + 150_000 + 30_000`
 pub const COST_REGISTER_TASK: u64 = 1_300_000;

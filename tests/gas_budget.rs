@@ -8,7 +8,7 @@
 
 use soroban_sdk::token::StellarAssetClient as TestTokenClient;
 use soroban_sdk::{testutils::Address as _, Address, Env, Vec};
-use vero_core_contracts::{gas::*, Role, VeroContractClient};
+use vero_core_contracts::{gas::*, BatchCall, ContractError, Role, VeroContractClient};
 
 /// Asserts that the CPU instructions consumed by the most recent contract
 /// invocation on the environment do not exceed the specified maximum cost.
@@ -176,4 +176,23 @@ fn test_gas_budget_unpause() {
 
     client.unpause(&admin);
     assert_budget_limit!(env, COST_UNPAUSE, "unpause");
+}
+
+#[test]
+fn test_batch_execute_rejects_batch_over_budget() {
+    let (env, _, admin, _, client) = setup();
+
+    // 80 × COST_REGISTER_TASK (1.3M) = 104M, over MAX_BATCH_EXECUTE_COST (100M),
+    // so the pre-flight cost sum must reject before any task is registered.
+    let mut calls = Vec::new(&env);
+    for task_id in 1..=80u64 {
+        calls.push_back(BatchCall::RegisterTask(admin.clone(), task_id, 1u32));
+    }
+
+    let result = client.try_batch_execute(&calls);
+    assert!(matches!(result, Err(Ok(ContractError::BatchTooLarge))));
+
+    // Rejected before dispatch: no task should have been registered.
+    assert!(client.get_task(&1u64).is_none());
+    assert!(client.get_task(&80u64).is_none());
 }

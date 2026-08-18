@@ -117,3 +117,63 @@ fn test_gas_budget_lock_tokens() {
     client.lock_tokens(&guardian, &1000i128);
     assert_budget_limit!(env, COST_LOCK_TOKENS, "lock_tokens");
 }
+
+#[test]
+fn test_gas_budget_cancel_task() {
+    let (env, _, admin, _, client) = setup();
+
+    client.register_task(&admin, &1u64, &1u32);
+    client.cancel_task(&admin, &1u64);
+    assert_budget_limit!(env, COST_CANCEL_TASK, "cancel_task");
+}
+
+#[test]
+fn test_gas_budget_remove_guardian() {
+    let (env, _, admin, _, client) = setup();
+    let first = Address::generate(&env);
+    let second = Address::generate(&env);
+    client.add_guardian(&admin, &first);
+    client.add_guardian(&admin, &second);
+
+    // Removing the first slot forces the dense-index swap-remove path
+    // (slot != last_slot), matching the worst case the estimate models.
+    client.remove_guardian(&admin, &first);
+    assert_budget_limit!(env, COST_REMOVE_GUARDIAN, "remove_guardian");
+}
+
+#[test]
+fn test_gas_budget_request_unlock() {
+    let (env, _, _, _, client) = setup();
+    let guardian = Address::generate(&env);
+
+    client.request_unlock(&guardian);
+    assert_budget_limit!(env, COST_REQUEST_UNLOCK, "request_unlock");
+}
+
+#[test]
+fn test_gas_budget_set_vault_address() {
+    let (env, _, admin, _, client) = setup();
+    let vault = Address::generate(&env);
+
+    client.set_vault_address(&admin, &vault);
+    assert_budget_limit!(env, COST_SET_VAULT_ADDRESS, "set_vault_address");
+}
+
+#[test]
+fn test_gas_budget_pause() {
+    let (env, _, admin, _, client) = setup();
+    client.grant_role(&admin, &admin, &Role::EmergencyManager);
+
+    client.pause(&admin);
+    assert_budget_limit!(env, COST_PAUSE, "pause");
+}
+
+#[test]
+fn test_gas_budget_unpause() {
+    let (env, _, admin, _, client) = setup();
+    client.grant_role(&admin, &admin, &Role::EmergencyManager);
+    client.pause(&admin);
+
+    client.unpause(&admin);
+    assert_budget_limit!(env, COST_UNPAUSE, "unpause");
+}

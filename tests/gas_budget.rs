@@ -179,6 +179,42 @@ fn test_gas_budget_unpause() {
 }
 
 #[test]
+fn test_gas_budget_add_guardian() {
+    let (env, _, admin, _, client) = setup();
+    let guardian = Address::generate(&env);
+
+    client.add_guardian(&admin, &guardian);
+    assert_budget_limit!(env, COST_ADD_GUARDIAN, "add_guardian");
+}
+
+#[test]
+fn test_gas_budget_set_reputation() {
+    let (env, _, admin, _, client) = setup();
+    let guardian = Address::generate(&env);
+    client.add_guardian(&admin, &guardian);
+
+    client.set_reputation(&admin, &guardian, &500);
+    assert_budget_limit!(env, COST_SET_REPUTATION, "set_reputation");
+}
+
+#[test]
+fn test_gas_budget_set_weight_threshold() {
+    let (env, _, admin, _, client) = setup();
+
+    client.set_weight_threshold(&admin, &500);
+    assert_budget_limit!(env, COST_SET_WEIGHT_THRESHOLD, "set_weight_threshold");
+}
+
+#[test]
+fn test_gas_budget_toggle_pause() {
+    let (env, _, admin, _, client) = setup();
+    client.grant_role(&admin, &admin, &Role::EmergencyManager);
+
+    client.toggle_pause(&admin);
+    assert_budget_limit!(env, COST_TOGGLE_PAUSE, "toggle_pause");
+}
+
+#[test]
 fn test_batch_execute_rejects_batch_over_budget() {
     let (env, _, admin, _, client) = setup();
 

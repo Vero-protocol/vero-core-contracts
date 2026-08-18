@@ -42,18 +42,18 @@ pub const COST_CANCEL_TASK: u64 = 1_650_000;
 ///     500_000 + 5*50_000 + 2*150_000 + 2*150_000 + 2*30_000 + 1_500_000
 pub const COST_VOTE: u64 = 3_200_000;
 
-/// `add_guardian`: base + circuit-breaker read + guardian write.
-/// `500_000 + 50_000 + 150_000`
-pub const COST_ADD_GUARDIAN: u64 = 700_000;
+/// `add_guardian`: paused/role reads + guardian + `AllGuardians` + dense-index writes + event.
+/// Measured ~1.15M instructions; padded for headroom.
+pub const COST_ADD_GUARDIAN: u64 = 1_400_000;
 
 /// `remove_guardian`: paused/role/has() reads + guardian remove + AllGuardians
 /// read/write + dense-index swap-remove reads/writes + event.
 /// Measured ~1.80M instructions; padded for headroom.
 pub const COST_REMOVE_GUARDIAN: u64 = 2_150_000;
 
-/// `set_reputation`: base + circuit-breaker read + reputation write.
-/// `500_000 + 50_000 + 150_000`
-pub const COST_SET_REPUTATION: u64 = 700_000;
+/// `set_reputation`: paused read + role read + guardian check + reputation write + event.
+/// Measured ~1.34M instructions; padded for headroom.
+pub const COST_SET_REPUTATION: u64 = 1_600_000;
 
 /// `lock_tokens`:
 ///   base + paused read + auth + token read + fee_bps read + treasury read + 2x transfer + balance read + balance write + event
@@ -74,9 +74,9 @@ pub const COST_UNLOCK_TOKENS: u64 = 5_000_000;
 ///   500_000 + 50_000 + 150_000 + 50_000 + 50_000 + 50_000 + 2*1_500_000 + 150_000
 pub const COST_RESIGN_GUARDIAN: u64 = 5_000_000;
 
-/// `set_weight_threshold`: base + threshold write.
-/// `500_000 + 150_000`
-pub const COST_SET_WEIGHT_THRESHOLD: u64 = 650_000;
+/// `set_weight_threshold`: paused read + role read + threshold write + event.
+/// Measured ~1.05M instructions; padded for headroom.
+pub const COST_SET_WEIGHT_THRESHOLD: u64 = 1_250_000;
 
 /// `set_vault_address`: paused read + role read + vault write + event.
 /// Measured ~1.05M instructions; padded for headroom.
@@ -90,9 +90,9 @@ pub const COST_SET_VAULT_ADDRESS: u64 = 1_250_000;
 ///   500_000 + 50_000 + 50_000 + 50_000 + 500_000 + 150_000 + 30_000
 pub const COST_START_REWARD_STREAM: u64 = 1_330_000;
 
-/// `toggle_pause` / `pause` / `unpause`: base + paused read + paused write + event.
-/// `500_000 + 50_000 + 150_000 + 30_000`
-pub const COST_TOGGLE_PAUSE: u64 = 730_000;
+/// `toggle_pause`: role read + paused read + paused write + event.
+/// Measured ~1.20M instructions; padded for headroom.
+pub const COST_TOGGLE_PAUSE: u64 = 1_450_000;
 
 /// `pause`: role read + paused write + event.
 /// Measured ~1.20M instructions; padded for headroom.

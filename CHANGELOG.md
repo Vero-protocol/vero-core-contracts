@@ -8,10 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial CHANGELOG.md to track protocol-level feature additions
+- **Role-Based Access Control**: `Role` enum with admin/manager/guardian permissions enforced across privileged entry points (#110)
+- **Custom Contract Errors**: typed `ContractError` enum with `panic_with_error!` and centralized error variants (#96, #111)
+- **Contract-Level Pause**: `require_not_paused` extracted into a dedicated `guards` module and applied to privileged entry points (#114, #117)
+- **Emergency Stop / Recovery**: emergency stop circuit for fund operations, emergency recovery mode, and `emergency_recover` entry point bypassing the pause gate (#99, #116, #172)
+- **Multi-Sig Contract Upgrades**: enforce multi-sig quorum with sorted approvals before contract upgrades (#109, #118)
+- **Protocol Event Emission**: emit events for state changes, optimized with a compact bitmask format (#102, #120)
+- **Storage Versioning**: versioned contract state storage with atomic migration pre-flight checks and commit-or-rollback cache (#113, #130)
+- **Dynamic Consensus Quorum**: per-task `min_votes_required` for a configurable quorum (#112)
+- **Protocol Fees**: configurable fee-bps deducted from token movements (#123)
+- **Guardian Rotation**: mechanism to rotate guardians (#124)
+- **Zero-Address Validation**: reject zero-address administrative inputs (#129)
+- **Batch Operations**: atomic batch voting and batch contract calls for transaction aggregation (#93, #98)
+- **Decoupled Logic/Storage**: native proxy pattern separating contract logic from storage (#92)
+- **Task Purging**: `purge_task` removes terminal tasks (including reward streams) from storage (#95, #180)
+- **Task Archiving RBAC**: `archive_task` now requires the TaskManager role (#179)
+- **Bounded Snapshot API**: `get_snapshot`/`record_snapshot` are cost-bounded with a paginated snapshot metadata API (#182)
+- **Formal Verification**: full K-framework formal verification setup for consensus invariants (#108)
+- **Testing**: gas-budget assertions for high-traffic operations, proptest property tests for consensus invariants, task-resolution regression test, and end-to-end happy-path integration test (#181, #187, #259, #188)
+- **Issue Templates**: bug report, feature request, and good-first-issue templates (#253)
 
 ### Changed
-- N/A
+- **Per-Task Vote Storage**: track voters per-task instead of a global vote list to improve scaling (#91)
+- Remove unused dependencies (#131)
+- Deduplicate `ZERO_ADDRESS_STR` constant between `src` and tests (#233)
+- Re-export `ARCHIVE_AFTER_SECONDS` and remove duplicate tests (#257)
+- Extract upgrade logic from `proxy_entry.rs` into `contracts::upgrade` (#260)
+- Move consensus inline tests to `tests/consensus.rs` (#235)
+- Validate each address exactly once per call path (#236)
+- Add `initialize-testnet` to the Makefile header comment (#234)
+- Wire `proofs/build.ps1` as the documented Windows entry point (#237)
+- Docs: README module registry, DataKey listing, and error-codes table synced with `src/`; duplicate Modules table and emergency-halt procedure removed; missing `grant_role` calls added to Quick Start; rustdoc added to `rbac.rs`, `storage_layout.rs`, and `validation.rs`; API documentation formalized; `DEPLOY.md`, `CONTRIBUTING.md`, and `TODO.md` added; `Description.md` purpose documented for the GrantFox registry; gas-benchmarks reference and reproduction instructions added; changelog release dates replaced with actual merge dates (#115, #173, #174, #177, #178, #183, #186, #189, #190, #251, #252, #254, #255, #258)
 
 ### Deprecated
 - N/A
@@ -21,9 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `resolved`/`wt_vote` events no longer truncate `task_id`/`weight` to 32 bits; both are now emitted as full `u64` values (#159)
+- `record_failure` is no longer permissionless and is now rate-limited (#175)
+- Isolate vault `release_funds` call to prevent task-resolution DoS (#184)
+- Sanitize administrative inputs and validate input ranges (#94, #97)
+- Fix compile errors and missing `testutils::Address` import after fee changes (#123)
+- Add end-to-end happy-path integration test for #137 (#188)
 
 ### Security
-- N/A
+- CI build/test workflow and dependency security scanning added (#176)
 
 ---
 
@@ -62,22 +94,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Prevents rapid drain exploits with 24-hour delay
 - Per-guardian independent timelock tracking
-
----
-
-## Upcoming Features
-
-The following features are visible in the source tree and will be documented when fully implemented:
-
-### In Development
-- **Fee-bps on Lock/Unlock**: Basis point fees for treasury operations
-- **Multi-Sig Contract Upgrades**: Proxy upgrade pattern for contract governance
-- **Storage Migrations**: Schema migration support
-- **Task Archiving/Purging**: Cleanup of completed/failed tasks
-- **Snapshots**: State snapshot functionality
-- **Drips System**: Drip distribution mechanism
-- **Consensus Module**: Core consensus logic
-- **Events**: Event emission for contract actions
 
 ---
 

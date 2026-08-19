@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use soroban_sdk::{Address, Env, IntoVal, Symbol, Val, Vec as SorobanVec};
+use soroban_sdk::{Address, Env, IntoVal, Symbol, Val, Vec};
 
 use crate::storage;
 use crate::types::{ContractError, DataKey, RewardStream};
@@ -30,7 +30,7 @@ pub fn start_drips_stream(
     }
 
     let resolution_status: u32 = 1;
-    let args: SorobanVec<Val> = SorobanVec::from_array(
+    let args: Vec<Val> = Vec::from_array(
         env,
         [
             contributor.clone().into_val(env),
@@ -49,11 +49,11 @@ pub fn start_drips_stream(
     };
     env.storage().instance().set(&stream_key, &stream);
 
-    let mut all_streams: SorobanVec<u64> = env
+    let mut all_streams: Vec<u64> = env
         .storage()
         .instance()
         .get(&DataKey::AllRewardStreams)
-        .unwrap_or(SorobanVec::new(env));
+        .unwrap_or(Vec::new(env));
     all_streams.push_back(task_id);
     env.storage()
         .instance()
@@ -70,9 +70,9 @@ pub fn get_reward_stream(env: &Env, task_id: u64) -> Option<RewardStream> {
 }
 
 /// Retrieves a list of all active reward stream task IDs.
-pub fn get_all_reward_streams(env: &Env) -> SorobanVec<u64> {
+pub fn get_all_reward_streams(env: &Env) -> Vec<u64> {
     env.storage()
         .instance()
         .get(&DataKey::AllRewardStreams)
-        .unwrap_or(SorobanVec::new(env))
+        .unwrap_or(Vec::new(env))
 }

@@ -8,6 +8,7 @@ use soroban_sdk::{
 use vero_core_contracts::Operation;
 use vero_core_contracts::VeroContractClient;
 use vero_core_contracts::ARCHIVE_AFTER_SECONDS;
+use vero_core_contracts::FAILURE_THRESHOLD;
 fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     let env = Env::default();
     env.mock_all_auths();
@@ -34,7 +35,7 @@ fn trip_circuit_breaker(env: &Env, client: &VeroContractClient) {
         env.ledger()
             .set_sequence_number(env.ledger().sequence() + 20 * (round + 1));
         for r in &reporters {
-            if recorded >= 51 {
+            if recorded > FAILURE_THRESHOLD {
                 break 'outer;
             }
             client.record_failure(r);

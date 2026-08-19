@@ -9,31 +9,9 @@
 use crate::contracts::rbac::require_role;
 use crate::events;
 use crate::types::{ContractError, DataKey, Role};
+use crate::utils::address::is_strictly_sorted_addresses;
 use crate::validation::validate_external_address as validate_address;
 use soroban_sdk::{panic_with_error, Address, BytesN, Env, Vec};
-
-/// Returns `true` iff `addrs` is strictly ordered, i.e. every address is
-/// strictly greater than its predecessor (with no duplicates).
-///
-/// Empty and single-element lists are trivially sorted.
-fn is_strictly_sorted_addresses(addrs: &Vec<Address>) -> bool {
-    if addrs.len() < 2 {
-        return true;
-    }
-
-    let mut prev = addrs.get(0).unwrap();
-    let mut i = 1;
-    while i < addrs.len() {
-        let current = addrs.get(i).unwrap();
-        if prev >= current {
-            return false;
-        }
-        prev = current;
-        i += 1;
-    }
-
-    true
-}
 
 /// Immediately replace the contract's WASM code. Callable only by the
 /// contract admin.

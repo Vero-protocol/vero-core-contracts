@@ -262,7 +262,7 @@ pub(crate) fn process_vote(
     // Keep this transition delegated to the Kani-verified consensus module.
     // Reimplementing it here could make the on-chain path diverge from the
     // arithmetic proved in `verification/`; see
-    // [VERIFICATION_REPORT.md](../../VERIFICATION_REPORT.md).
+    // [VERIFICATION_REPORT.md](../../../docs/history/VERIFICATION_REPORT.md).
     let mut consensus_state = crate::consensus::ConsensusState {
         total_weight_accrued: t.total_weight_accrued,
         votes: t.votes,
@@ -334,7 +334,7 @@ pub(crate) fn vote_inner(
     // Keep this transition delegated to the Kani-verified consensus module.
     // Reimplementing it here could make the on-chain path diverge from the
     // arithmetic proved in `verification/`; see
-    // [VERIFICATION_REPORT.md](../../VERIFICATION_REPORT.md).
+    // [VERIFICATION_REPORT.md](../../../docs/history/VERIFICATION_REPORT.md).
     let mut consensus_state = crate::consensus::ConsensusState {
         total_weight_accrued: t.total_weight_accrued,
         votes: t.votes,

@@ -39,6 +39,7 @@ pub use types::{
     SnapshotMeta, Task,
 };
 
+pub use circuit_breaker::FAILURE_THRESHOLD;
 pub use storage::ARCHIVE_AFTER_SECONDS;
 pub use utils::address::ZERO_ADDRESS_STR;
 

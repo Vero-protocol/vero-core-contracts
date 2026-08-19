@@ -645,9 +645,12 @@ pub(crate) fn get_reward_streams_page(env: &Env, offset: u32, limit: u32) -> Vec
     let mut page = Vec::new(env);
     let mut i = offset;
     while i < end {
-        let id = all.get(i).unwrap();
-        if let Some(s) = drips::get_reward_stream(env, id) {
-            page.push_back(s);
+        // `end` is clamped to `all.len()`, but handle a malformed or
+        // concurrently changed collection defensively instead of panicking.
+        if let Some(id) = all.get(i) {
+            if let Some(s) = drips::get_reward_stream(env, id) {
+                page.push_back(s);
+            }
         }
         i += 1;
     }

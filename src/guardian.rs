@@ -100,11 +100,14 @@ pub fn remove_guardian(env: &Env, _admin: Address, guardian: Address) -> Result<
         if count > 0 {
             let last_slot = count - 1;
             if slot != last_slot {
+                // A dense index must contain every slot below `count`; if
+                // storage is inconsistent, return a typed error rather than
+                // aborting the entire transaction.
                 let last_addr: Address = env
                     .storage()
                     .instance()
                     .get(&DataKey::GuardianIndexAt(last_slot))
-                    .unwrap();
+                    .ok_or(ContractError::InvalidConfig)?;
                 env.storage()
                     .instance()
                     .set(&DataKey::GuardianIndexAt(slot), &last_addr);

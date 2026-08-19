@@ -237,6 +237,8 @@ mod tests {
         });
 
         let published = env.events().all();
+        // The preceding contract call emits exactly one event, so the last
+        // event and its documented `(u64, u64)` payload are guaranteed here.
         let (_contract, _topics, data) = published.last().unwrap();
         let (task_id, weight): (u64, u64) = data.try_into_val(&env).unwrap();
         assert_eq!(task_id, big_task_id);
@@ -256,6 +258,9 @@ mod tests {
         });
 
         let published = env.events().all();
+        // The preceding contract call emits exactly one event, so the last
+        // event and its documented `(Address, u64, u64)` payload are
+        // guaranteed here.
         let (_contract, _topics, data) = published.last().unwrap();
         let (g, task_id, weight): (Address, u64, u64) = data.try_into_val(&env).unwrap();
         assert_eq!(g, guardian);

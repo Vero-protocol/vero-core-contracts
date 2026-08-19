@@ -4,14 +4,15 @@
 //! Extracted from `proxy_entry.rs` so the contract's upgrade path — the most
 //! security-sensitive code in the contract — lives in one module and can be
 //! reviewed in isolation. The public entry points in `proxy_entry.rs` delegate
-//! to the functions here; the exported contract API is unchanged.
+//! to the functions here; authorization failures are returned as typed contract
+//! errors instead of being unwrapped.
 
 use crate::contracts::rbac::require_role;
 use crate::events;
 use crate::types::{ContractError, DataKey, Role};
 use crate::utils::address::is_strictly_sorted_addresses;
 use crate::validation::validate_external_address as validate_address;
-use soroban_sdk::{panic_with_error, Address, BytesN, Env, Vec};
+use soroban_sdk::{Address, BytesN, Env, Vec};
 
 /// Immediately replace the contract's WASM code. Callable only by the
 /// contract admin.
@@ -19,14 +20,17 @@ use soroban_sdk::{panic_with_error, Address, BytesN, Env, Vec};
 /// This is the single-admin upgrade path; the multi-sig flow below
 /// (`set_upgrade_signers` / `propose_upgrade` / `approve_upgrade` /
 /// `execute_upgrade`) offers the quorum-gated alternative.
-pub fn upgrade_contract(env: Env, admin: Address, new_wasm_hash: BytesN<32>) {
-    if validate_address(&env, &admin).is_err() {
-        panic_with_error!(env, ContractError::InvalidAddress);
-    }
-    require_role(&env, &admin, Role::Admin).unwrap();
+pub fn upgrade_contract(
+    env: Env,
+    admin: Address,
+    new_wasm_hash: BytesN<32>,
+) -> Result<(), ContractError> {
+    validate_address(&env, &admin)?;
+    require_role(&env, &admin, Role::Admin)?;
     env.deployer()
         .update_current_contract_wasm(new_wasm_hash.clone());
     events::emit_contract_upgraded(&env, &admin, &new_wasm_hash);
+    Ok(())
 }
 
 /// Configure the list of authorized upgrade signers and the required quorum.

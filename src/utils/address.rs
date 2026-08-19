@@ -31,6 +31,9 @@ pub fn is_strictly_sorted_addresses(addrs: &Vec<Address>) -> bool {
         return true;
     }
 
+    // `len() >= 2` proves index 0 and every loop index below `len()` are
+    // populated; Soroban Vec cannot have holes. Keep the unwraps here as
+    // documented, invariant-backed accesses in this pure predicate.
     let mut prev = addrs.get(0).unwrap();
     let mut i = 1;
     while i < addrs.len() {

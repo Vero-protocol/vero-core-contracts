@@ -4,7 +4,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     Address, Env,
 };
-use vero_core_contracts::{Role, VeroContractClient, FAILURE_THRESHOLD};
+use vero_core_contracts::{DataKey, Role, VeroContractClient, FAILURE_THRESHOLD};
 
 const LOCK_THRESHOLD: i128 = 100;
 
@@ -761,6 +761,28 @@ fn test_removed_guardian_can_be_re_added() {
     let result = client.try_add_guardian(&admin, &guardian);
     assert!(result.is_ok(), "re-adding a removed guardian must succeed");
     assert!(client.is_guardian(&guardian));
+}
+
+#[test]
+fn test_guardian_index_corruption_returns_typed_error() {
+    let (env, admin, _token, client) = setup();
+    let g1 = Address::generate(&env);
+    let g2 = Address::generate(&env);
+
+    client.add_guardian(&admin, &g1);
+    client.add_guardian(&admin, &g2);
+
+    // Corrupt the dense index to exercise the defensive branch in
+    // remove_guardian instead of allowing a missing slot to panic.
+    env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .remove(&DataKey::GuardianIndexAt(1));
+    });
+
+    let result = client.try_remove_guardian(&admin, &g1);
+    assert!(result.is_err());
+    assert!(client.is_guardian(&g1));
 }
 
 #[test]

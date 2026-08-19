@@ -2,12 +2,12 @@
 
 use soroban_sdk::{symbol_short, Address, Env};
 
-// `task_id`/`weight` are validated as `u64` in validation.rs and can
+// `task_id`/`weight` are validated as `u64` in limits.rs and can
 // exceed `u32::MAX`. This guard fails to compile if either constant is
 // ever redefined to a type that can't round-trip through the `u64`s below.
 const _: () = {
-    let _: u64 = crate::validation::MAX_TASK_ID;
-    let _: u64 = crate::validation::MAX_WEIGHT_THRESHOLD;
+    let _: u64 = crate::limits::MAX_TASK_ID;
+    let _: u64 = crate::limits::MAX_WEIGHT_THRESHOLD;
 };
 
 /// Emits an event when a task reaches consensus.

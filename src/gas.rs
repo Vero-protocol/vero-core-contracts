@@ -165,7 +165,10 @@ pub const COST_CANCEL_UPGRADE: u64 = 980_000;
 /// `500_000 + 50_000 + 50_000 + 500_000 + 30_000`
 pub const COST_EMERGENCY_RECOVER: u64 = 1_130_000;
 
+/// `set_fee_bps`: base + address validation + paused read + role read + fee_bps write.
 pub const COST_SET_FEE_BPS: u64 = 650_000;
+
+/// `set_treasury_address`: base + address validation + paused read + role read + treasury write.
 pub const COST_SET_TREASURY_ADDRESS: u64 = 650_000;
 
 // ─── Public mapping function ───────────────────────────────────────────────────

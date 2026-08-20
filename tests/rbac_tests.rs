@@ -422,7 +422,7 @@ fn test_config_manager_can_set_vault_address() {
     client.grant_role(&admin, &manager, &Role::ConfigManager);
 
     client.set_vault_address(&manager, &vault);
-    assert_eq!(client.get_snapshot().vault_address, Some(vault));
+    assert_eq!(client.get_snapshot().meta.vault_address, Some(vault));
 }
 
 #[test]

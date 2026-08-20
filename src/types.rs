@@ -173,7 +173,7 @@ pub enum BatchCall {
     TogglePause(Address),
     Pause(Address),
     Unpause(Address),
-    RecordFailure(Address),
+    RecordFailure,
     ResetCircuitBreaker(Address),
     EmergencyRecover(Address, Address, i128),
     /// Set multi-sig upgrade signers and threshold.
@@ -183,7 +183,7 @@ pub enum BatchCall {
     /// Approve a pending upgrade.
     ApproveUpgrade(Address),
     /// Execute the upgrade once threshold is met.
-    ExecuteUpgrade(Address),
+    ExecuteUpgrade,
     /// Cancel a pending upgrade.
     CancelUpgrade(Address),
     SetFeeBps(Address, u32),

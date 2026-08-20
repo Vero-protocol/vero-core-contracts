@@ -392,3 +392,20 @@ fn test_zero_address_cannot_report() {
     assert_eq!(err.unwrap(), ContractError::InvalidAddress);
     assert_eq!(client.get_failure_count(), 0);
 }
+
+/// `BatchCall::RecordFailure` is a unit variant — it carries no address payload
+/// and increments the global failure counter via the anonymous batch path.
+#[test]
+fn test_batch_execute_with_record_failure_variant() {
+    let (env, _admin, client) = setup();
+
+    let calls = soroban_sdk::vec![
+        &env,
+        vero_core_contracts::BatchCall::RecordFailure
+    ];
+
+    let result = client.try_batch_execute(&calls);
+    assert!(result.is_ok());
+
+    assert_eq!(client.get_failure_count(), 1);
+}

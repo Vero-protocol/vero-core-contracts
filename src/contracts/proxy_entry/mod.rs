@@ -155,7 +155,7 @@ impl VeroContract {
                     Self::propose_upgrade(env.clone(), signer, hash)?
                 }
                 BatchCall::ApproveUpgrade(signer) => Self::approve_upgrade(env.clone(), signer)?,
-                BatchCall::ExecuteUpgrade(_signer) => Self::execute_upgrade(env.clone())?,
+                BatchCall::ExecuteUpgrade => Self::execute_upgrade(env.clone())?,
                 BatchCall::CancelUpgrade(admin) => Self::cancel_upgrade(env.clone(), admin)?,
                 BatchCall::StartRewardStream(admin, drips, contributor, task_id) => {
                     Self::start_reward_stream(env.clone(), admin, drips, contributor, task_id)?
@@ -163,7 +163,9 @@ impl VeroContract {
                 BatchCall::TogglePause(admin) => Self::toggle_pause(env.clone(), admin)?,
                 BatchCall::Pause(admin) => Self::pause(env.clone(), admin)?,
                 BatchCall::Unpause(admin) => Self::unpause(env.clone(), admin)?,
-                BatchCall::RecordFailure(reporter) => Self::record_failure(env.clone(), reporter)?,
+                BatchCall::RecordFailure => {
+                    crate::circuit_breaker::record_failure_anonymous(&env)?
+                }
                 BatchCall::ResetCircuitBreaker(admin) => {
                     Self::reset_circuit_breaker(env.clone(), admin)?;
                 }

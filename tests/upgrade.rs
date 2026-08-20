@@ -550,6 +550,18 @@ fn test_batch_execute_with_upgrade_operations() {
     assert_eq!(client.get_upgrade_signers().len(), 2);
 }
 
+#[test]
+fn test_batch_execute_with_execute_upgrade_variant() {
+    let (env, _contract_id, _admin, _token, client) = setup();
+
+    // `ExecuteUpgrade` is a unit variant that dispatches to `execute_upgrade(env)`.
+    // With no pending proposal, it must surface `NoPendingUpgrade` (i.e. the batch
+    // reverts) rather than silently ignoring a discarded address payload.
+    let calls = soroban_sdk::vec![&env, vero_core_contracts::BatchCall::ExecuteUpgrade];
+    let result = client.try_batch_execute(&calls);
+    assert!(result.is_err());
+}
+
 // ─── Storage isolation test ────────────────────────────────────────
 
 #[test]

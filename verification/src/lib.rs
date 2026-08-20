@@ -365,8 +365,5 @@ fn proof_resolution_invariant_helper() {
     }
 }
 
-// ─── Non-Kani fallback ────────────────────────────────────────────────────────
 // When compiled normally (not via `cargo kani`), this crate exposes no
-// symbols — it exists purely for Kani's symbolic execution.
-#[cfg(not(kani))]
-fn main() {}
+// public symbols — it exists purely for Kani's symbolic execution.

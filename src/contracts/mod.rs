@@ -22,10 +22,10 @@
 //! `contracts/`. If it is a self-contained domain/infrastructure primitive that
 //! several callers compose, it belongs at the crate root.
 pub mod logic;
-pub(crate) mod snapshot;
-pub(crate) mod vault_ops;
-pub(crate) mod voting;
 pub mod proxy_entry;
 pub mod rbac;
+pub(crate) mod snapshot;
 pub mod storage_layout;
 pub mod upgrade;
+pub(crate) mod vault_ops;
+pub(crate) mod voting;

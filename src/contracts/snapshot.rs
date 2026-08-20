@@ -6,7 +6,9 @@
 //! operations live in [`super::vault_ops`]; vote processing lives in
 //! [`super::voting`].
 
-use crate::types::{ContractError, DataKey, GuardianEntry, RewardStream, Snapshot, SnapshotMeta, Task};
+use crate::types::{
+    ContractError, DataKey, GuardianEntry, RewardStream, Snapshot, SnapshotMeta, Task,
+};
 use crate::DEFAULT_WEIGHT_THRESHOLD;
 use crate::{drips, events, guardian, limits, reputation, storage, task};
 use soroban_sdk::{Address, Env, Map, Vec};

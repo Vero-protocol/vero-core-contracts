@@ -161,7 +161,7 @@ impl VeroContract {
                     Self::set_weight_threshold(env.clone(), admin, threshold)?
                 }
                 BatchCall::SetVaultAddress(admin, vault) => {
-                    Self::set_vault_address(env.clone(), admin, vault)
+                    Self::set_vault_address(env.clone(), admin, vault)?
                 }
                 BatchCall::SetUpgradeSigners(admin, signers, threshold) => {
                     Self::set_upgrade_signers(env.clone(), admin, signers, threshold)?

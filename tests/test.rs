@@ -461,7 +461,10 @@ fn vault_address_validation_rejects_self_without_mutation() {
     let vault = Address::generate(&env);
 
     client.set_vault_address(&admin, &vault);
-    assert_eq!(client.get_snapshot().meta.vault_address, Some(vault.clone()));
+    assert_eq!(
+        client.get_snapshot().meta.vault_address,
+        Some(vault.clone())
+    );
 }
 
 #[test]

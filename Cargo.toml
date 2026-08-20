@@ -1,7 +1,11 @@
+[workspace]
+members = [".", "verification"]
+
 [package]
 name = "vero-core-contracts"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -11,6 +15,7 @@ soroban-sdk = { version = "21.0.0", features = ["alloc"] }
 
 [dev-dependencies]
 soroban-sdk = { version = "21.0.0", features = ["testutils"] }
+proptest = "1"
 
 [profile.release]
 opt-level = "z"
@@ -21,3 +26,6 @@ debug-assertions = false
 panic = "abort"
 codegen-units = 1
 lto = true
+
+[profile.dev]
+overflow-checks = true

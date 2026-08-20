@@ -1,0 +1,28 @@
+[package]
+name = "vero-verification"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# This crate is ONLY for formal verification harnesses.
+# It is never compiled into the WASM artifact.
+#
+# Run proofs with:
+#   cargo install --locked kani-verifier && cargo kani setup
+#   cargo kani --manifest-path verification/Cargo.toml
+
+[dependencies]
+# Pull in the pure consensus logic from the main crate. `consensus` is a
+# plain public module with no Soroban `Env` dependency, so no feature
+# gate is needed to opt out of the host environment.
+vero-core-contracts = { path = ".." }
+
+# NOTE: `kani` is NOT listed as a dependency here.
+# Kani injects its own stubs at verification time via `cargo kani`.
+# Adding it as a normal dep would fail because `kani` (the crate) is
+# only available inside Kani's custom toolchain, not on crates.io.
+# The harnesses use `#[cfg(kani)]` to be invisible to normal builds.
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+

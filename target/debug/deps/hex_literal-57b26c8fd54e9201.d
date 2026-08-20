@@ -1,8 +1,0 @@
-/home/user/vero-core-contracts/target/debug/deps/hex_literal-57b26c8fd54e9201.d: /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1/src/lib.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1/src/../README.md
-
-/home/user/vero-core-contracts/target/debug/deps/libhex_literal-57b26c8fd54e9201.rlib: /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1/src/lib.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1/src/../README.md
-
-/home/user/vero-core-contracts/target/debug/deps/libhex_literal-57b26c8fd54e9201.rmeta: /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1/src/lib.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1/src/../README.md
-
-/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1/src/lib.rs:
-/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1/src/../README.md:

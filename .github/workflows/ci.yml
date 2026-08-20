@@ -1,1 +1,97 @@
-# CI Run
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D clippy::all
+      - name: Build
+        run: cargo build --workspace --verbose
+      - name: Test
+        run: cargo test --workspace --verbose
+
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # `cargo tarpaulin --engine llvm` needs the LLVM coverage tools to
+          # merge profraw files; they are not installed with the base stable
+          # toolchain.
+          components: llvm-tools
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
+      - name: Run tests with coverage
+        run: cargo tarpaulin --package vero-core-contracts --engine llvm --out lcov --output-dir coverage
+      - name: Publish coverage summary
+        run: |
+          LF=$(awk -F: '/^LF:/{s+=$2} END{print s+0}' coverage/lcov.info)
+          LH=$(awk -F: '/^LH:/{s+=$2} END{print s+0}')
+          BRF=$(awk -F: '/^BRF:/{s+=$2} END{print s+0}')
+          BRH=$(awk -F: '/^BRH:/{s+=$2} END{print s+0}')
+          PCT=$(awk -v a="$LH" -v b="$LF" 'BEGIN { if (b>0) printf "%.1f%%", 100*a/b; else printf "n/a" }')
+          {
+            echo "## Test coverage"
+            echo ""
+            echo "Lines covered: **$PCT** ($LH/$LF)"
+            if [ -n "$BRF" ] && [ "$BRF" -gt 0 ]; then
+              echo "Branches covered: **$BRH/$BRF**"
+            fi
+            echo ""
+            echo "Full LCOV report uploaded as the **coverage-report** artifact."
+            echo "Coverage is reporting-only and never gates the build."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+          if-no-files-found: error
+
+  security-audit:
+    name: Security Audit (cargo-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+      - name: Audit dependencies for known vulnerabilities
+        # RUSTSEC-2024-0436 (paste, unmaintained) is a transitive soroban-sdk
+        # test dependency, not an active vuln — see deny.toml for detail.
+        # cargo-audit's default (no --deny) already fails the build on any
+        # real vulnerability; it just doesn't hard-fail on info-level notices.
+        run: cargo audit --ignore RUSTSEC-2024-0436
+
+  cargo-deny:
+    name: cargo-deny (advisories, licenses, bans)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check

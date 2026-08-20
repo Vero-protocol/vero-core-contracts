@@ -374,7 +374,7 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for dev enviro
 
 ## License
 
-Apache-2.0
+[MIT License](LICENSE)
 
 
 

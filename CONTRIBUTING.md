@@ -74,6 +74,21 @@ cargo fmt
 
 All of these checks run automatically in CI on every pull request. Your PR will not be merged if any of them fail.
 
+### Test coverage
+
+CI measures test coverage with [`cargo-tarpaulin`](https://github.com/xd009642/tarpaulin) on every pull request and surfaces the result in the run's job summary (the raw LCOV report is uploaded as the `coverage-report` artifact). Coverage is **reporting-only** — it never fails the build.
+
+To reproduce the CI report locally (Linux or macOS):
+
+```bash
+cargo install cargo-tarpaulin
+cargo tarpaulin --package vero-core-contracts --engine llvm --out lcov --output-dir coverage
+```
+
+The `Coverage:` line printed by tarpaulin and the generated `coverage/lcov.info` are exactly what CI uploads.
+
+> **Note:** `cargo-tarpaulin` only runs on Linux and macOS. On Windows, run it inside the provided Dev Container or WSL.
+
 ### Running formal proofs (K Framework)
 
 The `proofs/` directory contains K-framework formal verification specs. Running them requires [K Framework 6.0+](https://github.com/runtimeverification/k) installed separately.

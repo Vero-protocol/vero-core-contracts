@@ -31,9 +31,13 @@ pub fn is_strictly_sorted_addresses(addrs: &Vec<Address>) -> bool {
         return true;
     }
 
+    // SAFETY: this line is only reached when `addrs.len() >= 2`, so index 0
+    // is always in range and `get(0)` is provably `Some`.
     let mut prev = addrs.get(0).unwrap();
     let mut i = 1;
     while i < addrs.len() {
+        // SAFETY: the loop condition guarantees `i < addrs.len()`, so
+        // `get(i)` is provably `Some`. Proven-safe invariant.
         let current = addrs.get(i).unwrap();
         if prev >= current {
             return false;

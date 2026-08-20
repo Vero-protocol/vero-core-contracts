@@ -154,6 +154,14 @@ pub struct Snapshot {
 }
 
 /// A single call within a `batch_execute` transaction.
+///
+/// This is the **batchable subset** of [`Operation`]: every variant maps
+/// one-to-one onto an [`Operation`] variant via [`BatchCall::operation`],
+/// which is the canonical place to register that mapping. A few operations
+/// are intentionally not batchable — immediate `Operation::UpgradeContract`,
+/// `Operation::RecordSnapshot`, `Operation::PurgeTask`, and the
+/// `Operation::VoteBatch` meta-operation — and therefore have no `BatchCall`
+/// counterpart.
 #[contracttype]
 #[derive(Clone)]
 pub enum BatchCall {
@@ -190,7 +198,57 @@ pub enum BatchCall {
     SetTreasuryAddress(Address, Address),
 }
 
-/// Every public write operation exposed by VeroContract.
+impl BatchCall {
+    /// Returns the [`Operation`] identifier for this batchable call.
+    ///
+    /// This is the single source of truth linking the batchable subset to the
+    /// canonical [`Operation`] enum. The match is exhaustive, so adding a new
+    /// `BatchCall` variant forces an update here — which in turn requires a
+    /// matching `Operation` variant and a `gas::get_estimated_cost` arm —
+    /// keeping batching and gas estimation in sync by construction.
+    pub fn operation(&self) -> Operation {
+        match self {
+            BatchCall::RegisterTask(..) => Operation::RegisterTask,
+            BatchCall::CancelTask(..) => Operation::CancelTask,
+            BatchCall::Vote(..) => Operation::Vote,
+            BatchCall::AddGuardian(..) => Operation::AddGuardian,
+            BatchCall::RemoveGuardian(..) => Operation::RemoveGuardian,
+            BatchCall::SetReputation(..) => Operation::SetReputation,
+            BatchCall::LockTokens(..) => Operation::LockTokens,
+            BatchCall::RequestUnlock(..) => Operation::RequestUnlock,
+            BatchCall::UnlockTokens(..) => Operation::UnlockTokens,
+            BatchCall::ResignGuardian(..) => Operation::ResignGuardian,
+            BatchCall::SetWeightThreshold(..) => Operation::SetWeightThreshold,
+            BatchCall::SetVaultAddress(..) => Operation::SetVaultAddress,
+            BatchCall::StartRewardStream(..) => Operation::StartRewardStream,
+            BatchCall::TogglePause(..) => Operation::TogglePause,
+            BatchCall::Pause(..) => Operation::Pause,
+            BatchCall::Unpause(..) => Operation::Unpause,
+            BatchCall::RecordFailure(..) => Operation::RecordFailure,
+            BatchCall::ResetCircuitBreaker(..) => Operation::ResetCircuitBreaker,
+            BatchCall::EmergencyRecover(..) => Operation::EmergencyRecover,
+            BatchCall::SetUpgradeSigners(..) => Operation::SetUpgradeSigners,
+            BatchCall::ProposeUpgrade(..) => Operation::ProposeUpgrade,
+            BatchCall::ApproveUpgrade(..) => Operation::ApproveUpgrade,
+            BatchCall::ExecuteUpgrade(..) => Operation::ExecuteUpgrade,
+            BatchCall::CancelUpgrade(..) => Operation::CancelUpgrade,
+            BatchCall::SetFeeBps(..) => Operation::SetFeeBps,
+            BatchCall::SetTreasuryAddress(..) => Operation::SetTreasuryAddress,
+        }
+    }
+}
+
+/// Every public write operation exposed by `VeroContract`.
+///
+/// This is the canonical, single source of truth for the contract's write
+/// surface. [`BatchCall`] is its batchable subset: every `BatchCall` variant
+/// maps to exactly one `Operation` variant (see [`BatchCall::operation`]), so
+/// `gas::get_estimated_cost` has an entry for every batchable operation.
+///
+/// A handful of operations are intentionally non-batchable and therefore have
+/// no [`BatchCall`] counterpart: `UpgradeContract` (immediate, admin-only WASM
+/// replacement), `RecordSnapshot`, `PurgeTask` (bulk storage removal), and
+/// `VoteBatch` (itself a batch meta-operation).
 #[contracttype]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
@@ -225,6 +283,18 @@ pub enum Operation {
     EmergencyRecover = 21,
     SetFeeBps = 22,
     SetTreasuryAddress = 23,
+    /// `cancel_task` — cancel an active task.
+    CancelTask = 24,
+    /// `remove_guardian` — remove a guardian and its reputation/index entries.
+    RemoveGuardian = 25,
+    /// `request_unlock` — initiate a timelocked token unlock.
+    RequestUnlock = 26,
+    /// `set_vault_address` — point the contract at its vault.
+    SetVaultAddress = 27,
+    /// `pause` — pause the contract.
+    Pause = 28,
+    /// `unpause` — resume the contract.
+    Unpause = 29,
 }
 
 #[contracterror]
@@ -292,4 +362,48 @@ pub enum ContractError {
     /// Failure report rejected: the contract is in "trusted reporters only" mode
     /// and the caller is neither a guardian nor an EmergencyManager/Admin.
     UnauthorizedReporter = 41,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BatchCall, Operation};
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::{Address, Env};
+
+    #[test]
+    fn batch_call_maps_to_operation() {
+        let env = Env::default();
+        let a = Address::generate(&env);
+        let b = Address::generate(&env);
+
+        // Previously-divergent batchable variants now map onto `Operation`.
+        assert_eq!(
+            BatchCall::CancelTask(a.clone(), 1).operation(),
+            Operation::CancelTask
+        );
+        assert_eq!(
+            BatchCall::RemoveGuardian(a.clone(), b.clone()).operation(),
+            Operation::RemoveGuardian
+        );
+        assert_eq!(
+            BatchCall::RequestUnlock(a.clone()).operation(),
+            Operation::RequestUnlock
+        );
+        assert_eq!(
+            BatchCall::SetVaultAddress(a.clone(), b.clone()).operation(),
+            Operation::SetVaultAddress
+        );
+        assert_eq!(BatchCall::Pause(a.clone()).operation(), Operation::Pause);
+        assert_eq!(
+            BatchCall::Unpause(a.clone()).operation(),
+            Operation::Unpause
+        );
+
+        // Spot-check a couple of pre-existing mappings.
+        assert_eq!(
+            BatchCall::RegisterTask(a.clone(), 1, 1).operation(),
+            Operation::RegisterTask
+        );
+        assert_eq!(BatchCall::Vote(a.clone(), 1).operation(), Operation::Vote);
+    }
 }

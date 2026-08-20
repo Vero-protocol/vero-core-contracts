@@ -116,6 +116,21 @@ impl VeroContract {
         env: Env,
         calls: soroban_sdk::Vec<BatchCall>,
     ) -> Result<(), ContractError> {
+        // Bound the batch by its total estimated instruction cost so a caller
+        // can't submit more work than one transaction can execute. The
+        // `BatchCall::operation()` -> `gas::get_estimated_cost()` mapping is
+        // the single source of truth linking each batchable call to its cost,
+        // so a new `BatchCall` variant can't be dispatched without a
+        // registered gas estimate.
+        let mut estimated_cost: u64 = 0;
+        for call in calls.iter() {
+            estimated_cost =
+                estimated_cost.saturating_add(crate::gas::get_estimated_cost(call.operation()));
+            if estimated_cost > crate::gas::MAX_BATCH_EXECUTE_COST {
+                return Err(ContractError::BatchTooLarge);
+            }
+        }
+
         for call in calls.iter() {
             match call {
                 BatchCall::RegisterTask(admin, task_id, min_votes_required) => {

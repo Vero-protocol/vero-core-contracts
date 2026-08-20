@@ -4,8 +4,10 @@
 //!
 //! * [`proxy_entry`] — the `#[contractimpl]` entrypoint blocks (the public
 //!   contract API), split by domain.
-//! * [`logic`] — shared request-processing logic invoked by the entrypoints
-//!   (voting, token locking/unlocking, emergency recovery, …).
+//! * [`logic`] — re-exports from the three domain sub-modules below.
+//! * [`vault_ops`] — token/fee locking, unlocking, resign, and emergency recovery.
+//! * [`voting`] — vote processing (single, inner, and batch).
+//! * [`snapshot`] — snapshot building and paginated collection views.
 //! * [`rbac`] — role-based access control (`require_role`, role grants/revokes).
 //! * [`storage_layout`] — the instance storage key schema (`DataKey`).
 //! * [`upgrade`] — the immediate + multi-sig upgrade state machine.
@@ -20,6 +22,9 @@
 //! `contracts/`. If it is a self-contained domain/infrastructure primitive that
 //! several callers compose, it belongs at the crate root.
 pub mod logic;
+pub(crate) mod snapshot;
+pub(crate) mod vault_ops;
+pub(crate) mod voting;
 pub mod proxy_entry;
 pub mod rbac;
 pub mod storage_layout;

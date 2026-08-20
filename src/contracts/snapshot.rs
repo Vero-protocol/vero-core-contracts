@@ -224,6 +224,8 @@ pub(crate) fn get_reward_streams_page(env: &Env, offset: u32, limit: u32) -> Vec
     let mut page = Vec::new(env);
     let mut i = offset;
     while i < end {
+        // SAFETY: the loop condition guarantees `i < end <= all.len()`, so
+        // `get(i)` is provably `Some`. Proven-safe invariant.
         let id = all.get(i).unwrap();
         if let Some(s) = drips::get_reward_stream(env, id) {
             page.push_back(s);

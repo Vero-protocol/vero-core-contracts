@@ -17,7 +17,15 @@ impl VeroContract {
     /// contract admin.
     ///
     /// Delegates to [`crate::contracts::upgrade`].
-    pub fn upgrade_contract(env: Env, admin: Address, new_wasm_hash: BytesN<32>) {
+    ///
+    /// # Errors
+    /// * `InvalidAddress` — the admin is the zero address or the contract itself.
+    /// * `NotAuthorized` — the caller does not hold the `Admin` role.
+    pub fn upgrade_contract(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
         crate::contracts::upgrade::upgrade_contract(env, admin, new_wasm_hash)
     }
 

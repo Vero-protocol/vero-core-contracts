@@ -1,0 +1,12 @@
+# Default ownership for the repository
+* @N-thnI @N-i-xx
+
+# Top-level source modules
+/src/*.rs @N-thnI @N-i-xx
+/src/contracts/ @N-thnI @N-i-xx
+
+# Security-sensitive contract paths
+/src/contracts/upgrade.rs @N-thnI @N-i-xx
+/src/contracts/proxy_entry/ @N-thnI @N-i-xx
+/src/guardian.rs @N-thnI @N-i-xx
+/src/reentrancy.rs @N-thnI @N-i-xx

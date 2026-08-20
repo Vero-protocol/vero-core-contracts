@@ -4,7 +4,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     Address, Env,
 };
-use vero_core_contracts::{ContractError, Role, VeroContractClient};
+use vero_core_contracts::{ContractError, Role, VeroContractClient, FAILURE_THRESHOLD};
 
 const LOCK_THRESHOLD: i128 = 100;
 
@@ -43,7 +43,7 @@ fn trip_circuit_breaker(env: &Env, client: &VeroContractClient) {
         env.ledger()
             .set_sequence_number(env.ledger().sequence() + 20 * (round + 1));
         for r in &reporters {
-            if recorded >= 51 {
+            if recorded > FAILURE_THRESHOLD {
                 break 'outer;
             }
             client.record_failure(r);

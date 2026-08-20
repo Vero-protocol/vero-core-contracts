@@ -3,7 +3,7 @@ use crate::types::Operation;
 // ─── Instruction-unit cost constants ──────────────────────────────────────────
 //
 // Calibrated against Soroban's metering schedule (Stellar Protocol 21):
-//   • Base invocation overhead      ~500_000 instructions
+//   • Base invocation overhead      ~1_000_000 instructions
 //   • Instance storage read          ~50_000 instructions per entry
 //   • Instance storage write        ~150_000 instructions per entry
 //   • Cross-contract call overhead  ~500_000 instructions (per call)
@@ -12,12 +12,27 @@ use crate::types::Operation;
 //
 // Values are intentionally conservative (slightly above observed minimums) so
 // that callers using these estimates as a gas limit are unlikely to run short.
+// The per-op arithmetic in each doc comment is only a rough breakdown; for
+// operations covered by `tests/gas_budget.rs` the constant is calibrated
+// against the measured CPU instruction cost instead.
 // All figures are in instruction units, which map 1-to-1 to the `fee_per_instruction_increment`
 // ledger base-fee calculation used by Stellar's fee schedule.
+
+/// Upper bound on the total estimated instruction cost of a single
+/// `batch_execute` call. Mirrors the protocol's per-transaction CPU
+/// instruction budget (100M instructions), so any batch whose summed
+/// `get_estimated_cost` stays under this ceiling is guaranteed to fit within
+/// one transaction. `batch_execute` rejects larger batches with
+/// `ContractError::BatchTooLarge`.
+pub const MAX_BATCH_EXECUTE_COST: u64 = 100_000_000;
 
 /// `register_task`: base + reentrancy lock write + has() check + role check + task write + index write + unlock write + event.
 /// `500_000 + 150_000 + 50_000 + 50_000 + 150_000 + 150_000 + 150_000 + 30_000`
 pub const COST_REGISTER_TASK: u64 = 1_300_000;
+
+/// `cancel_task`: paused read + role read + task read + task write + event.
+/// Measured ~1.38M instructions; padded for headroom.
+pub const COST_CANCEL_TASK: u64 = 1_650_000;
 
 /// `vote`:
 ///   base + circuit-breaker read + 5 reads (token, threshold, balance, voted, task)
@@ -27,18 +42,27 @@ pub const COST_REGISTER_TASK: u64 = 1_300_000;
 ///     500_000 + 5*50_000 + 2*150_000 + 2*150_000 + 2*30_000 + 1_500_000
 pub const COST_VOTE: u64 = 3_200_000;
 
-/// `add_guardian`: base + circuit-breaker read + guardian write.
-/// `500_000 + 50_000 + 150_000`
-pub const COST_ADD_GUARDIAN: u64 = 700_000;
+/// `add_guardian`: paused/role reads + guardian + `AllGuardians` + dense-index writes + event.
+/// Measured ~1.15M instructions; padded for headroom.
+pub const COST_ADD_GUARDIAN: u64 = 1_400_000;
 
-/// `set_reputation`: base + circuit-breaker read + reputation write.
-/// `500_000 + 50_000 + 150_000`
-pub const COST_SET_REPUTATION: u64 = 700_000;
+/// `remove_guardian`: paused/role/has() reads + guardian remove + AllGuardians
+/// read/write + dense-index swap-remove reads/writes + event.
+/// Measured ~1.80M instructions; padded for headroom.
+pub const COST_REMOVE_GUARDIAN: u64 = 2_150_000;
+
+/// `set_reputation`: paused read + role read + guardian check + reputation write + event.
+/// Measured ~1.34M instructions; padded for headroom.
+pub const COST_SET_REPUTATION: u64 = 1_600_000;
 
 /// `lock_tokens`:
 ///   base + paused read + auth + token read + fee_bps read + treasury read + 2x transfer + balance read + balance write + event
 ///   500_000 + 5*50_000 + 2*1_500_000 + 50_000 + 150_000 + 30_000
 pub const COST_LOCK_TOKENS: u64 = 5_000_000;
+
+/// `request_unlock`: paused read + timelock write + event.
+/// Measured ~1.04M instructions; padded for headroom.
+pub const COST_REQUEST_UNLOCK: u64 = 1_250_000;
 
 /// `unlock_tokens`:
 ///   base + has() check + guardian read + balance read + fee read + treasury read + 2x token transfer + balance write
@@ -50,9 +74,13 @@ pub const COST_UNLOCK_TOKENS: u64 = 5_000_000;
 ///   500_000 + 50_000 + 150_000 + 50_000 + 50_000 + 50_000 + 2*1_500_000 + 150_000
 pub const COST_RESIGN_GUARDIAN: u64 = 5_000_000;
 
-/// `set_weight_threshold`: base + threshold write.
-/// `500_000 + 150_000`
-pub const COST_SET_WEIGHT_THRESHOLD: u64 = 650_000;
+/// `set_weight_threshold`: paused read + role read + threshold write + event.
+/// Measured ~1.05M instructions; padded for headroom.
+pub const COST_SET_WEIGHT_THRESHOLD: u64 = 1_250_000;
+
+/// `set_vault_address`: paused read + role read + vault write + event.
+/// Measured ~1.05M instructions; padded for headroom.
+pub const COST_SET_VAULT_ADDRESS: u64 = 1_250_000;
 
 /// `start_reward_stream`:
 ///   base + circuit-breaker read + task read + stream has() check
@@ -62,9 +90,17 @@ pub const COST_SET_WEIGHT_THRESHOLD: u64 = 650_000;
 ///   500_000 + 50_000 + 50_000 + 50_000 + 500_000 + 150_000 + 30_000
 pub const COST_START_REWARD_STREAM: u64 = 1_330_000;
 
-/// `toggle_pause` / `pause` / `unpause`: base + paused read + paused write + event.
-/// `500_000 + 50_000 + 150_000 + 30_000`
-pub const COST_TOGGLE_PAUSE: u64 = 730_000;
+/// `toggle_pause`: role read + paused read + paused write + event.
+/// Measured ~1.20M instructions; padded for headroom.
+pub const COST_TOGGLE_PAUSE: u64 = 1_450_000;
+
+/// `pause`: role read + paused write + event.
+/// Measured ~1.20M instructions; padded for headroom.
+pub const COST_PAUSE: u64 = 1_450_000;
+
+/// `unpause`: role read + paused write + event.
+/// Measured ~1.34M instructions; padded for headroom.
+pub const COST_UNPAUSE: u64 = 1_600_000;
 
 /// `record_failure(reporter)`: base + auth + trusted-mode read + cooldown read + reporter-quota read + reporter index read/write + last-report write + reporter-count write + failure-count read/write + conditional paused write + report event + conditional trip event.
 ///
@@ -129,7 +165,10 @@ pub const COST_CANCEL_UPGRADE: u64 = 980_000;
 /// `500_000 + 50_000 + 50_000 + 500_000 + 30_000`
 pub const COST_EMERGENCY_RECOVER: u64 = 1_130_000;
 
+/// `set_fee_bps`: base + address validation + paused read + role read + fee_bps write.
 pub const COST_SET_FEE_BPS: u64 = 650_000;
+
+/// `set_treasury_address`: base + address validation + paused read + role read + treasury write.
 pub const COST_SET_TREASURY_ADDRESS: u64 = 650_000;
 
 // ─── Public mapping function ───────────────────────────────────────────────────
@@ -150,15 +189,21 @@ pub const COST_SET_TREASURY_ADDRESS: u64 = 650_000;
 pub fn get_estimated_cost(op: Operation) -> u64 {
     match op {
         Operation::RegisterTask => COST_REGISTER_TASK,
+        Operation::CancelTask => COST_CANCEL_TASK,
         Operation::Vote => COST_VOTE,
         Operation::AddGuardian => COST_ADD_GUARDIAN,
+        Operation::RemoveGuardian => COST_REMOVE_GUARDIAN,
         Operation::SetReputation => COST_SET_REPUTATION,
         Operation::LockTokens => COST_LOCK_TOKENS,
+        Operation::RequestUnlock => COST_REQUEST_UNLOCK,
         Operation::UnlockTokens => COST_UNLOCK_TOKENS,
         Operation::ResignGuardian => COST_RESIGN_GUARDIAN,
         Operation::SetWeightThreshold => COST_SET_WEIGHT_THRESHOLD,
+        Operation::SetVaultAddress => COST_SET_VAULT_ADDRESS,
         Operation::StartRewardStream => COST_START_REWARD_STREAM,
         Operation::TogglePause => COST_TOGGLE_PAUSE,
+        Operation::Pause => COST_PAUSE,
+        Operation::Unpause => COST_UNPAUSE,
         Operation::RecordFailure => COST_RECORD_FAILURE,
         Operation::ResetCircuitBreaker => COST_RESET_CIRCUIT_BREAKER,
         Operation::UpgradeContract => COST_UPGRADE_CONTRACT,
@@ -173,5 +218,57 @@ pub fn get_estimated_cost(op: Operation) -> u64 {
         Operation::EmergencyRecover => COST_EMERGENCY_RECOVER,
         Operation::SetFeeBps => COST_SET_FEE_BPS,
         Operation::SetTreasuryAddress => COST_SET_TREASURY_ADDRESS,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::get_estimated_cost;
+    use crate::types::Operation;
+
+    #[test]
+    fn every_operation_has_a_cost_estimate() {
+        let ops = [
+            Operation::RegisterTask,
+            Operation::CancelTask,
+            Operation::Vote,
+            Operation::AddGuardian,
+            Operation::RemoveGuardian,
+            Operation::SetReputation,
+            Operation::LockTokens,
+            Operation::RequestUnlock,
+            Operation::UnlockTokens,
+            Operation::ResignGuardian,
+            Operation::SetWeightThreshold,
+            Operation::SetVaultAddress,
+            Operation::StartRewardStream,
+            Operation::TogglePause,
+            Operation::Pause,
+            Operation::Unpause,
+            Operation::RecordFailure,
+            Operation::ResetCircuitBreaker,
+            Operation::UpgradeContract,
+            Operation::RecordSnapshot,
+            Operation::PurgeTask,
+            Operation::VoteBatch,
+            Operation::SetUpgradeSigners,
+            Operation::ProposeUpgrade,
+            Operation::ApproveUpgrade,
+            Operation::ExecuteUpgrade,
+            Operation::CancelUpgrade,
+            Operation::EmergencyRecover,
+            Operation::SetFeeBps,
+            Operation::SetTreasuryAddress,
+        ];
+
+        for op in ops {
+            let cost = get_estimated_cost(op);
+            assert!(
+                cost > 500_000,
+                "{:?} has no meaningful cost estimate: {}",
+                op,
+                cost
+            );
+        }
     }
 }

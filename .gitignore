@@ -6,3 +6,5 @@ test_snapshots/
 target/
 Cargo.lock
 coverage/
+# JetBrains IDEs (RustRover, IntelliJ, etc.)
+.idea/

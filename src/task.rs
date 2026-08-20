@@ -3,6 +3,7 @@
 use soroban_sdk::{panic_with_error, Address, Env, Vec};
 
 use crate::events;
+use crate::limits::MAX_REGISTER_TASK_BATCH_SIZE;
 use crate::reentrancy;
 use crate::storage;
 use crate::types::{ContractError, DataKey, Error, Task};
@@ -13,8 +14,6 @@ use crate::validation;
 fn is_terminal(task: &Task) -> bool {
     task.is_done || task.is_cancelled
 }
-
-const MAX_REGISTER_TASK_BATCH_SIZE: u32 = 32;
 
 /// Registers a batch of new voting tasks in the contract storage.
 ///

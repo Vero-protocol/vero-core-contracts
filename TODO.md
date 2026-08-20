@@ -4,12 +4,14 @@
 
 - [x] Read all relevant files
 - [x] Plan approved
-- [ ] Create `docs/history/` directory
-- [ ] Move IMPLEMENTATION_SUMMARY.md → docs/history/
-- [ ] Move VERIFICATION_REPORT.md → docs/history/
-- [ ] Move pull_request.md → docs/history/
-- [ ] Move task_progress.md → docs/history/
-- [ ] Move Description.md → docs/history/
-- [ ] Delete original files from repo root
-- [ ] Update TODO.md — complete
+- [x] Create `docs/history/` directory
+- [x] Move IMPLEMENTATION_SUMMARY.md → docs/history/
+- [x] Move VERIFICATION_REPORT.md → docs/history/
+- [x] Move pull_request.md → docs/history/
+- [x] Move task_progress.md → docs/history/
+- [x] Keep Description.md at the repo root (required by the GrantFox registry)
+- [x] Delete original files from repo root
+- [x] Update TODO.md — complete
+
+Migration for #165 is complete. `Description.md` intentionally remains at the repo root because it is consumed directly by the GrantFox registry; see the note at the top of that file.
 

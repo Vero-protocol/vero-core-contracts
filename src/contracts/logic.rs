@@ -13,11 +13,13 @@
 //! All items are re-exported at this level so every existing `logic::foo`
 //! call site continues to compile without modification.
 
-pub(crate) use snapshot::{
+pub(crate) use super::snapshot::{
     get_guardians_page, get_reward_streams_page, get_snapshot, get_snapshot_meta, get_tasks_page,
     record_snapshot,
 };
-pub(crate) use vault_ops::{
+pub(crate) use super::vault_ops::{
     emergency_recover, lock_tokens, request_unlock, resign_guardian, unlock_tokens,
 };
-pub(crate) use voting::{process_vote, process_vote_batch, try_release_vault_funds, vote_inner};
+pub(crate) use super::voting::{
+    process_vote, process_vote_batch, try_release_vault_funds, vote_inner,
+};

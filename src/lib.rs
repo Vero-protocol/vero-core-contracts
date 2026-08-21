@@ -35,7 +35,6 @@ mod timelock;
 mod types;
 mod utils;
 mod validation;
-mod vault;
 
 pub use contracts::proxy_entry::{VeroContract, VeroContractClient};
 pub use types::{

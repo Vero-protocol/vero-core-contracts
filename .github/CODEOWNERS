@@ -1,0 +1,31 @@
+# CODEOWNERS
+#
+# Per-path review ownership for vero-core-contracts.
+#
+# There is no per-module maintainer subdivision yet, so every path
+# defaults to the two current org maintainers (@N-thnI @N-i-xx)
+# rather than leaving paths unassigned. The explicit entries below
+# make ownership visible and easy to tighten per-module later.
+#
+# NOTE: this repo has no src/contracts/ directory — contract upgrade
+# authority (upgrade_contract) lives in src/lib.rs, escrow payouts in
+# src/vault.rs, and the global pause guard in src/circuit_breaker.rs.
+
+# Global default: both org maintainers own everything.
+* @N-thnI @N-i-xx
+
+# ── Security-sensitive: upgrade authority & consensus ──────────────
+src/lib.rs             @N-thnI @N-i-xx
+src/guardian.rs        @N-thnI @N-i-xx
+src/reentrancy.rs      @N-thnI @N-i-xx
+src/vault.rs           @N-thnI @N-i-xx
+src/circuit_breaker.rs @N-thnI @N-i-xx
+
+# ── Consensus & reputation ─────────────────────────────────────────
+src/reputation.rs      @N-thnI @N-i-xx
+src/task.rs            @N-thnI @N-i-xx
+src/drips.rs           @N-thnI @N-i-xx
+
+# ── Shared types & events ──────────────────────────────────────────
+src/types.rs           @N-thnI @N-i-xx
+src/events.rs          @N-thnI @N-i-xx

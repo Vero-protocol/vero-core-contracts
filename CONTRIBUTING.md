@@ -180,7 +180,9 @@ If nothing in the list matches your interest, feel free to open an issue describ
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/) Code of Conduct. By participating you agree to abide by its terms. Please report unacceptable behaviour to the maintainers.
+This project follows the local [Code of Conduct](CODE_OF_CONDUCT.md), adapted
+from Contributor Covenant v2.1. By participating you agree to abide by its terms.
+Please report unacceptable behaviour by opening an issue in this repository.
 
 ---
 

@@ -62,6 +62,13 @@ On-chain GitHub PR verification for the Stellar ecosystem. Guardians — trusted
 
 ---
 
+## Community
+
+Contributors are expected to follow the local [Code of Conduct](CODE_OF_CONDUCT.md)
+when participating in this repository.
+
+---
+
 ## Quick Start
 
 ### Prerequisites

@@ -7,14 +7,20 @@
 
 use crate::types::{ContractError, DataKey};
 use crate::DEFAULT_WEIGHT_THRESHOLD;
-use crate::{circuit_breaker, events, guardian, reentrancy, reputation, storage, vault};
-use soroban_sdk::{Address, Env, Vec};
+use crate::{circuit_breaker, events, guardian, reentrancy, reputation, storage};
+use soroban_sdk::{contractclient, Address, Env, Vec};
+
+#[contractclient(name = "VaultClient")]
+#[allow(dead_code)]
+pub trait Vault {
+    fn release_funds(env: Env, task_id: u64);
+}
 
 /// Attempts to release funds from the vault.  If the vault call fails the
 /// failure is logged via an event but does not revert the transaction; task
 /// resolution must never be blocked by a broken vault.
 pub(crate) fn try_release_vault_funds(env: &Env, task_id: u64, vault_addr: &Address) {
-    let vault_client = vault::VaultClient::new(env, vault_addr);
+    let vault_client = VaultClient::new(env, vault_addr);
     let result = vault_client.try_release_funds(&task_id);
 
     match result {

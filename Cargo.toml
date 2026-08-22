@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "verification"]
+members = [".", "consensus", "verification"]
 
 [package]
 name = "vero-core-contracts"
@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = { version = "21.0.0", features = ["alloc"] }
+vero-consensus = { path = "consensus" }
 
 [dev-dependencies]
 soroban-sdk = { version = "21.0.0", features = ["testutils"] }

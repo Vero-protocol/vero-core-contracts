@@ -1,0 +1,11 @@
+[package]
+name = "vero-consensus"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Pure, no_std-compatible consensus logic for the Vero protocol — no Soroban host dependency."
+
+# No external dependencies: this crate is intentionally minimal so that
+# Kani and other model checkers can consume it without mocking the Soroban
+# host environment.
+[dependencies]

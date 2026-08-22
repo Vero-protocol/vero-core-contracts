@@ -65,12 +65,6 @@ pub(crate) fn process_vote(
         return Err(ContractError::InsufficientLockedBalance);
     }
 
-    let voted_key = DataKey::Voted(task_id, guardian.clone());
-    if env.storage().instance().has(&voted_key) {
-        reentrancy::unlock(env);
-        return Err(ContractError::DuplicateVote);
-    }
-
     let weight = match reputation::get_rep(env, &guardian) {
         Ok(w) => w,
         Err(e) => {
@@ -84,66 +78,16 @@ pub(crate) fn process_vote(
         return Err(ContractError::ZeroWeightVote);
     }
 
-    let mut t = match storage::get_active_task(env, task_id) {
-        Some(t) => t,
-        None => {
-            reentrancy::unlock(env);
-            return Err(ContractError::TaskNotFound);
-        }
-    };
-
-    if t.is_cancelled {
-        reentrancy::unlock(env);
-        return Err(ContractError::TaskCancelled);
-    }
-
-    let weight_threshold: u64 = env
-        .storage()
-        .instance()
-        .get(&DataKey::WeightThreshold)
-        .unwrap_or(DEFAULT_WEIGHT_THRESHOLD);
-
-    // Keep this transition delegated to the Kani-verified consensus module.
-    // Reimplementing it here could make the on-chain path diverge from the
-    // arithmetic proved in `verification/`; see
-    // [VERIFICATION_REPORT.md](../../../docs/history/VERIFICATION_REPORT.md).
-    let mut consensus_state = crate::consensus::ConsensusState {
-        total_weight_accrued: t.total_weight_accrued,
-        votes: t.votes,
-        is_done: t.is_done,
-    };
-    if let Err(e) = crate::consensus::apply_vote(&mut consensus_state, weight, weight_threshold) {
-        reentrancy::unlock(env);
-        return Err(match e {
-            crate::consensus::ConsensusError::WeightOverflow => ContractError::WeightOverflow,
-            crate::consensus::ConsensusError::ZeroWeight => ContractError::ZeroWeightVote,
-        });
-    }
-    t.total_weight_accrued = consensus_state.total_weight_accrued;
-    t.votes = consensus_state.votes;
-
-    if consensus_state.is_done && t.votes >= t.min_votes_required && !t.is_done {
-        t.is_done = true;
-        t.resolved_at = env.ledger().timestamp();
-        events::emit_task_resolved(env, task_id, t.total_weight_accrued);
-
-        if let Some(vault_addr) = env
-            .storage()
-            .instance()
-            .get::<_, Address>(&DataKey::VaultAddress)
-        {
-            try_release_vault_funds(env, task_id, &vault_addr);
-        }
-    }
-
-    env.storage().instance().set(&voted_key, &true);
-    storage::append_task_voter(env, task_id, &guardian);
-    storage::set_active_task(env, &t);
-
-    events::emit_weighted_vote(env, task_id, &guardian, weight);
+    // Per-task validation and state mutation (duplicate-vote check, task
+    // fetch, cancellation check, consensus application, resolution + vault
+    // release, persistence, and event emission) is shared with
+    // `process_vote_batch` via `vote_inner`. See its doc comment: the caller
+    // must hold the reentrancy lock and have verified guardian-level checks,
+    // both of which are done above.
+    let result = vote_inner(env, &guardian, task_id, weight);
 
     reentrancy::unlock(env);
-    Ok(())
+    result
 }
 
 /// Core vote logic without authentication or reentrancy management.

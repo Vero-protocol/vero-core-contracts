@@ -52,3 +52,54 @@ fn test_admin_stored_on_initialize() {
 
     assert_eq!(client.get_admin(), Some(admin));
 }
+
+/// `initialize` must authenticate the account it installs as Admin.
+///
+/// Without `admin.require_auth()`, an observer can front-run initialization on
+/// a deployed-but-uninitialized contract and install themselves as Admin —
+/// which gates `grant_role`, `upgrade_contract`, `set_upgrade_signers` and
+/// `migrate_storage`.
+#[test]
+#[should_panic]
+fn test_initialize_requires_admin_auth() {
+    let env = Env::default();
+    // Deliberately no mock_all_auths(): the call must fail without admin's
+    // signature. If require_auth() is ever removed, this test stops panicking.
+    let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+    let client = VeroContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
+
+    client.initialize(&admin, &token, &0);
+}
+
+/// A negative lock threshold permanently disables the vote stake requirement.
+///
+/// `voting.rs` rejects a vote when `locked_balance <= threshold`. With a
+/// threshold of -1, a guardian holding nothing evaluates `0 <= -1` as false and
+/// is allowed to vote. `LockThreshold` has no setter, so this cannot be undone.
+/// Zero is legitimate — it means "any non-zero stake" — so only negatives are
+/// rejected.
+#[test]
+fn test_initialize_rejects_negative_lock_threshold() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+    let client = VeroContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
+
+    assert!(client.try_initialize(&admin, &token, &-1).is_err());
+
+    // Zero remains valid: it requires a strictly positive locked balance.
+    client.initialize(&admin, &token, &0);
+    assert!(client.get_admin().is_some());
+}

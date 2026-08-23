@@ -56,8 +56,21 @@ impl VeroContract {
         token: Address,
         lock_threshold: i128,
     ) -> Result<(), ContractError> {
+        // Authenticate the account being installed as admin. Without this, an
+        // observer can front-run initialization on a deployed-but-uninitialized
+        // contract and install themselves as Admin.
+        admin.require_auth();
+
         validate_address(&env, &admin)?;
         validate_address(&env, &token)?;
+        // LockThreshold has no setter, so a bad value here is permanent. voting.rs
+        // rejects a vote when `locked_balance <= threshold`, so a negative
+        // threshold makes `0 <= -1` false and lets a guardian holding nothing
+        // vote. Zero is a legitimate setting meaning "any non-zero stake", so
+        // only negatives are rejected here.
+        if lock_threshold < 0 {
+            return Err(ContractError::InvalidAmount);
+        }
 
         if env
             .storage()

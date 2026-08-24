@@ -11,7 +11,6 @@ pub fn archived_task_key(task_id: u64) -> DataKey {
     DataKey::ArchivedTask(task_id)
 }
 
-#[allow(dead_code)]
 pub fn has_active_task(env: &Env, task_id: u64) -> bool {
     env.storage().instance().has(&active_task_key(task_id))
 }

@@ -362,6 +362,11 @@ pub enum ContractError {
     /// Failure report rejected: the contract is in "trusted reporters only" mode
     /// and the caller is neither a guardian nor an EmergencyManager/Admin.
     UnauthorizedReporter = 41,
+    /// `upgrade_contract` (single-admin path) was called after
+    /// `set_upgrade_signers` configured a multi-sig quorum for this
+    /// deployment; upgrades must go through `propose_upgrade` /
+    /// `approve_upgrade` / `execute_upgrade` instead.
+    SingleSignerUpgradeDisabled = 42,
 }
 
 #[cfg(test)]

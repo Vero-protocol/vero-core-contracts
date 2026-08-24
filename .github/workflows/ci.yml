@@ -28,6 +28,49 @@ jobs:
       - name: Test
         run: cargo test --workspace --verbose
 
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # `cargo tarpaulin --engine llvm` needs the LLVM coverage tools to
+          # merge profraw files; they are not installed with the base stable
+          # toolchain.
+          components: llvm-tools
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
+      - name: Run tests with coverage
+        run: cargo tarpaulin --package vero-core-contracts --engine llvm --out lcov --output-dir coverage
+      - name: Publish coverage summary
+        run: |
+          LF=$(awk -F: '/^LF:/{s+=$2} END{print s+0}' coverage/lcov.info)
+          LH=$(awk -F: '/^LH:/{s+=$2} END{print s+0}')
+          BRF=$(awk -F: '/^BRF:/{s+=$2} END{print s+0}')
+          BRH=$(awk -F: '/^BRH:/{s+=$2} END{print s+0}')
+          PCT=$(awk -v a="$LH" -v b="$LF" 'BEGIN { if (b>0) printf "%.1f%%", 100*a/b; else printf "n/a" }')
+          {
+            echo "## Test coverage"
+            echo ""
+            echo "Lines covered: **$PCT** ($LH/$LF)"
+            if [ -n "$BRF" ] && [ "$BRF" -gt 0 ]; then
+              echo "Branches covered: **$BRH/$BRF**"
+            fi
+            echo ""
+            echo "Full LCOV report uploaded as the **coverage-report** artifact."
+            echo "Coverage is reporting-only and never gates the build."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+          if-no-files-found: error
+
   security-audit:
     name: Security Audit (cargo-audit)
     runs-on: ubuntu-latest

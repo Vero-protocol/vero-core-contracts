@@ -4,17 +4,12 @@
 // RewardStream(task_id) / AllRewardStreams entries once the task
 // referenced by that stream has been purged.
 
+mod common;
+
+use common::MockDripsContract;
 use soroban_sdk::token::StellarAssetClient;
-use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, Address, Env};
 use vero_core_contracts::{Role, VeroContractClient};
-
-#[contract]
-pub struct MockDripsContract;
-
-#[contractimpl]
-impl MockDripsContract {
-    pub fn start_stream(_env: Env, _contributor: Address, _task_id: u64, _resolution_status: u32) {}
-}
 
 const LOCK_THRESHOLD: i128 = 100;
 

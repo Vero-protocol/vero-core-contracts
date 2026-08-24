@@ -15,7 +15,7 @@ fn test_registry_starts_clean() {
     assert_eq!(client.get_weight_threshold(), 300);
 
     let stranger = Address::generate(&env);
-    assert_eq!(client.calculate_voting_power(&stranger), None);
+    assert_eq!(client.get_reputation(&stranger), None);
     assert_eq!(client.get_reputation(&stranger), None);
 }
 

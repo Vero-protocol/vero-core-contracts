@@ -124,23 +124,14 @@ pub struct GuardianEntry {
 }
 
 /// A snapshot of the contract state at a specific point in time.
+///
+/// Header metadata is composed via [`SnapshotMeta`] rather than duplicated,
+/// so any new header field only needs to be added in one place.
 #[contracttype]
 #[derive(Clone)]
 pub struct Snapshot {
-    /// Timestamp when the snapshot was recorded.
-    pub timestamp: u64,
-    /// Whether the contract was paused.
-    pub paused: bool,
-    /// Number of failures recorded in the circuit breaker.
-    pub failure_count: u32,
-    /// The weight threshold required to resolve a task.
-    pub weight_threshold: u64,
-    /// The admin address, if set.
-    pub admin: Option<Address>,
-    /// The vault address, if set.
-    pub vault_address: Option<Address>,
-    /// The drips contract address, if set.
-    pub drips_address: Option<Address>,
+    /// Header fields shared with the lightweight [`SnapshotMeta`] view.
+    pub meta: SnapshotMeta,
     /// Map of registered guardian addresses.
     pub guardians: Map<Address, bool>,
     /// Map of guardian reputation scores.

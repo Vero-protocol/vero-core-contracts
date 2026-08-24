@@ -41,24 +41,6 @@ pub fn get_reputation(env: &Env, guardian: &Address) -> Option<u64> {
     env.storage().instance().get(&key)
 }
 
-/// Calculates the voting power for a given guardian based on their
-/// reputation score. The voting power is a direct mapping of the
-/// reputation score — higher reputation yields proportionally more
-/// influence in the weighted consensus.
-///
-/// Returns `None` if no reputation score is registered.
-///
-/// # Voting power tiers (example policy):
-/// - Score 0: no voting power (rejected at vote time)
-/// - Score 1–99: lightweight contributor
-/// - Score 100–499: established contributor
-/// - Score 500+: core contributor / high-trust guardian
-///
-/// The raw score IS the weight — tier labels are informational only.
-pub fn calculate_voting_power(env: &Env, guardian: &Address) -> Option<u64> {
-    get_reputation(env, guardian)
-}
-
 /// Returns the reputation score for `guardian`, or an error if absent or below
 /// [`MIN_REPUTATION_THRESHOLD`].
 ///

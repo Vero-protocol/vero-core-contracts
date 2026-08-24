@@ -422,7 +422,7 @@ fn test_config_manager_can_set_vault_address() {
     client.grant_role(&admin, &manager, &Role::ConfigManager);
 
     client.set_vault_address(&manager, &vault);
-    assert_eq!(client.get_snapshot().vault_address, Some(vault));
+    assert_eq!(client.get_snapshot().meta.vault_address, Some(vault));
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn test_non_config_manager_cannot_set_vault_address() {
 
     let result = client.try_set_vault_address(&stranger, &vault);
     assert!(matches!(result, Err(Ok(ContractError::NotAuthorized))));
-    assert_eq!(client.get_snapshot().vault_address, None);
+    assert_eq!(client.get_snapshot().meta.vault_address, None);
 }
 
 #[test]
@@ -446,7 +446,7 @@ fn test_set_vault_address_rejected_while_paused() {
 
     let result = client.try_set_vault_address(&admin, &vault);
     assert!(matches!(result, Err(Ok(ContractError::ContractPaused))));
-    assert_eq!(client.get_snapshot().vault_address, None);
+    assert_eq!(client.get_snapshot().meta.vault_address, None);
 }
 
 #[test]

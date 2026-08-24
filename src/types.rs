@@ -172,7 +172,7 @@ pub enum BatchCall {
     TogglePause(Address),
     Pause(Address),
     Unpause(Address),
-    RecordFailure(Address),
+    RecordFailure,
     ResetCircuitBreaker(Address),
     EmergencyRecover(Address, Address, i128),
     /// Set multi-sig upgrade signers and threshold.
@@ -182,7 +182,7 @@ pub enum BatchCall {
     /// Approve a pending upgrade.
     ApproveUpgrade(Address),
     /// Execute the upgrade once threshold is met.
-    ExecuteUpgrade(Address),
+    ExecuteUpgrade,
     /// Cancel a pending upgrade.
     CancelUpgrade(Address),
     SetFeeBps(Address, u32),
@@ -215,13 +215,13 @@ impl BatchCall {
             BatchCall::TogglePause(..) => Operation::TogglePause,
             BatchCall::Pause(..) => Operation::Pause,
             BatchCall::Unpause(..) => Operation::Unpause,
-            BatchCall::RecordFailure(..) => Operation::RecordFailure,
+            BatchCall::RecordFailure => Operation::RecordFailure,
             BatchCall::ResetCircuitBreaker(..) => Operation::ResetCircuitBreaker,
             BatchCall::EmergencyRecover(..) => Operation::EmergencyRecover,
             BatchCall::SetUpgradeSigners(..) => Operation::SetUpgradeSigners,
             BatchCall::ProposeUpgrade(..) => Operation::ProposeUpgrade,
             BatchCall::ApproveUpgrade(..) => Operation::ApproveUpgrade,
-            BatchCall::ExecuteUpgrade(..) => Operation::ExecuteUpgrade,
+            BatchCall::ExecuteUpgrade => Operation::ExecuteUpgrade,
             BatchCall::CancelUpgrade(..) => Operation::CancelUpgrade,
             BatchCall::SetFeeBps(..) => Operation::SetFeeBps,
             BatchCall::SetTreasuryAddress(..) => Operation::SetTreasuryAddress,

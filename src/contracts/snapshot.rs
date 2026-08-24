@@ -86,13 +86,18 @@ pub(crate) fn get_snapshot(env: &Env) -> Result<Snapshot, ContractError> {
     }
 
     Ok(Snapshot {
-        timestamp,
-        paused,
-        failure_count,
-        weight_threshold,
-        admin,
-        vault_address,
-        drips_address,
+        meta: SnapshotMeta {
+            timestamp,
+            paused,
+            failure_count,
+            weight_threshold,
+            admin,
+            vault_address,
+            drips_address,
+            guardian_count: all_guardians.len(),
+            task_count: all_tasks.len(),
+            reward_stream_count: all_streams.len(),
+        },
         guardians,
         reputations,
         tasks,
@@ -237,7 +242,7 @@ pub(crate) fn get_reward_streams_page(env: &Env, offset: u32, limit: u32) -> Vec
 
 pub(crate) fn record_snapshot(env: &Env) -> Result<(), ContractError> {
     let snapshot = get_snapshot(env)?;
-    let timestamp = snapshot.timestamp;
+    let timestamp = snapshot.meta.timestamp;
 
     let mut all_snapshots: soroban_sdk::Vec<u64> = env
         .storage()

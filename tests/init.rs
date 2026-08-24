@@ -52,3 +52,33 @@ fn test_admin_stored_on_initialize() {
 
     assert_eq!(client.get_admin(), Some(admin));
 }
+
+#[test]
+fn test_initialize_rejects_zero_lock_threshold() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+    let client = VeroContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract_v2(token_admin);
+
+    let result = client.try_initialize(&admin, &token.address(), &0i128);
+    assert!(result.is_err(), "lock_threshold of 0 must be rejected");
+}
+
+#[test]
+fn test_initialize_rejects_negative_lock_threshold() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+    let client = VeroContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract_v2(token_admin);
+
+    let result = client.try_initialize(&admin, &token.address(), &-1i128);
+    assert!(result.is_err(), "negative lock_threshold must be rejected");
+}

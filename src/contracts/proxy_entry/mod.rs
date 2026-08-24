@@ -36,7 +36,7 @@ pub mod entry_upgrades;
 
 use crate::events;
 use crate::types::{BatchCall, ContractError, DataKey};
-use crate::validation::validate_external_address as validate_address;
+use crate::validation::{validate_external_address as validate_address, validate_lock_threshold};
 use soroban_sdk::{contract, contractimpl, Address, Env};
 
 /// The main entrypoint for the Vero Core contract.
@@ -58,6 +58,7 @@ impl VeroContract {
     ) -> Result<(), ContractError> {
         validate_address(&env, &admin)?;
         validate_address(&env, &token)?;
+        validate_lock_threshold(lock_threshold)?;
 
         if env
             .storage()

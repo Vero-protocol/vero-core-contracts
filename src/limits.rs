@@ -36,16 +36,13 @@ pub(crate) const MAX_PAGE_LIMIT: u32 = 50;
 pub(crate) const MAX_TASK_ID: u64 = u64::MAX / 2;
 
 /// Upper bound for token amounts locked/transferred by the contract.
-#[allow(dead_code)]
 pub(crate) const MAX_TOKEN_AMOUNT: i128 = i128::MAX / 2;
 
 /// Upper bound for the vote-lock threshold, one below `MAX_TOKEN_AMOUNT`.
-#[allow(dead_code)]
 pub(crate) const MAX_LOCK_THRESHOLD: i128 = MAX_TOKEN_AMOUNT - 1;
 
 /// Upper bound for a single guardian's reputation score.
 pub(crate) const MAX_REPUTATION_SCORE: u64 = 1_000_000_000;
 
 /// Upper bound for the cumulative weight required to resolve a task.
-#[allow(dead_code)]
 pub(crate) const MAX_WEIGHT_THRESHOLD: u64 = 1_000_000_000_000;

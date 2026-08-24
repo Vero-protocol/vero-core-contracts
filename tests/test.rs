@@ -70,9 +70,8 @@ fn setup_with_lock_threshold(
     let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
     let client = VeroContractClient::new(&env, &contract_id);
 
-    // Initialize with lock threshold of 0 so tests that don't lock tokens
-    // can still vote. Tests that exercise token locking set their own thresholds.
-    client.initialize(&admin, &token, &0i128);
+    // Initialize with the provided lock threshold.
+    client.initialize(&admin, &token, &lock_threshold);
 
     (env, admin, token, client)
 }
@@ -1200,7 +1199,7 @@ fn test_migrate_storage_requires_admin_auth() {
         .address();
     let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
     let client = VeroContractClient::new(&env, &contract_id);
-    client.initialize(&admin, &token, &0i128);
+    client.initialize(&admin, &token, &1i128);
 
     let stranger = Address::generate(&env);
     let result = client.try_migrate_storage(&stranger);

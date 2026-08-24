@@ -399,10 +399,7 @@ fn test_zero_address_cannot_report() {
 fn test_batch_execute_with_record_failure_variant() {
     let (env, _admin, client) = setup();
 
-    let calls = soroban_sdk::vec![
-        &env,
-        vero_core_contracts::BatchCall::RecordFailure
-    ];
+    let calls = soroban_sdk::vec![&env, vero_core_contracts::BatchCall::RecordFailure];
 
     let result = client.try_batch_execute(&calls);
     assert!(result.is_ok());

@@ -20,6 +20,4 @@ pub(crate) use super::snapshot::{
 pub(crate) use super::vault_ops::{
     emergency_recover, lock_tokens, request_unlock, resign_guardian, unlock_tokens,
 };
-pub(crate) use super::voting::{
-    process_vote, process_vote_batch, try_release_vault_funds, vote_inner,
-};
+pub(crate) use super::voting::{process_vote, process_vote_batch};

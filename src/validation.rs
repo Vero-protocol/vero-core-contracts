@@ -58,7 +58,6 @@ pub fn validate_token_amount(amount: i128) -> Result<(), ContractError> {
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn validate_lock_threshold(lock_threshold: i128) -> Result<(), ContractError> {
     if lock_threshold <= 0 {
         return Err(ContractError::InvalidAmount);

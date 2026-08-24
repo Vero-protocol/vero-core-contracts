@@ -594,6 +594,60 @@ fn test_single_signer_succeeds_immediately() {
     );
 }
 
+// ─── Single-admin bypass closed once multi-sig is configured ──────
+
+#[test]
+fn test_upgrade_contract_allowed_before_signers_configured() {
+    let (env, admin, _token, client) = setup_without_signers();
+    let wasm_hash = BytesN::from_array(&env, &[18u8; 32]);
+
+    // No multi-sig signers configured yet: the bootstrap-only single-admin
+    // path is still reachable. It fails at the runtime deployer call (the
+    // hash isn't real WASM), not at our multi-sig gate.
+    let result = client.try_upgrade_contract(&admin, &wasm_hash);
+    assert!(
+        result.is_err(),
+        "should attempt deploy and fail at runtime, not be blocked by our gate"
+    );
+}
+
+#[test]
+fn test_upgrade_contract_blocked_once_signers_configured() {
+    let (env, _contract_id, admin, _token, client) = setup();
+    let signers = generate_signers(&env, 2);
+    let wasm_hash = BytesN::from_array(&env, &[19u8; 32]);
+
+    // Once multi-sig signers are configured, the single-admin escape hatch
+    // must be permanently closed for this deployment.
+    client.set_upgrade_signers(&admin, &signers, &2u32);
+
+    let result = client.try_upgrade_contract(&admin, &wasm_hash);
+    assert!(
+        matches!(result, Err(Ok(ContractError::SingleSignerUpgradeDisabled))),
+        "upgrade_contract should be rejected once multi-sig signers are set"
+    );
+}
+
+#[test]
+fn test_upgrade_contract_still_blocked_after_signers_cleared_by_reconfig() {
+    // Reconfiguring signers via set_upgrade_signers clears any *pending
+    // proposal*, but UpgradeSigners itself remains set — the single-admin
+    // path must stay closed.
+    let (env, _contract_id, admin, _token, client) = setup();
+    let signers = generate_signers(&env, 2);
+    let new_signers = generate_signers(&env, 3);
+    let wasm_hash = BytesN::from_array(&env, &[20u8; 32]);
+
+    client.set_upgrade_signers(&admin, &signers, &2u32);
+    client.set_upgrade_signers(&admin, &new_signers, &2u32);
+
+    let result = client.try_upgrade_contract(&admin, &wasm_hash);
+    assert!(matches!(
+        result,
+        Err(Ok(ContractError::SingleSignerUpgradeDisabled))
+    ));
+}
+
 // ─── Legacy upgrade test preserved ─────────────────────────────────
 
 #[test]

@@ -4,7 +4,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     Address, Env,
 };
-use vero_core_contracts::{Role, VeroContractClient, FAILURE_THRESHOLD};
+use vero_core_contracts::{ContractError, Role, VeroContractClient, FAILURE_THRESHOLD};
 
 const LOCK_THRESHOLD: i128 = 100;
 
@@ -423,6 +423,40 @@ fn test_config_manager_can_set_vault_address() {
 
     client.set_vault_address(&manager, &vault);
     assert_eq!(client.get_snapshot().vault_address, Some(vault));
+}
+
+#[test]
+fn test_non_config_manager_cannot_set_vault_address() {
+    let (env, _admin, _token, client) = setup();
+    let stranger = Address::generate(&env);
+    let vault = Address::generate(&env);
+
+    let result = client.try_set_vault_address(&stranger, &vault);
+    assert!(matches!(result, Err(Ok(ContractError::NotAuthorized))));
+    assert_eq!(client.get_snapshot().vault_address, None);
+}
+
+#[test]
+fn test_set_vault_address_rejected_while_paused() {
+    let (env, admin, _token, client) = setup();
+    let vault = Address::generate(&env);
+
+    client.pause(&admin);
+    assert!(client.is_paused());
+
+    let result = client.try_set_vault_address(&admin, &vault);
+    assert!(matches!(result, Err(Ok(ContractError::ContractPaused))));
+    assert_eq!(client.get_snapshot().vault_address, None);
+}
+
+#[test]
+fn test_upgrade_contract_rejects_non_admin() {
+    let (env, _admin, _token, client) = setup();
+    let stranger = Address::generate(&env);
+    let wasm_hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+
+    let result = client.try_upgrade_contract(&stranger, &wasm_hash);
+    assert!(matches!(result, Err(Ok(ContractError::NotAuthorized))));
 }
 
 // ─── Per-Function Access Control: EmergencyManager ──────────────────

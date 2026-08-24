@@ -70,20 +70,26 @@ fn test_initialize_requires_admin_auth() {
 
     let admin = Address::generate(&env);
     let token_admin = Address::generate(&env);
-    let token = env
-        .register_stellar_asset_contract_v2(token_admin)
-        .address();
+    let token = env.register_stellar_asset_contract_v2(token_admin);
 
-    client.initialize(&admin, &token, &0);
+    client.initialize(&admin, &token.address(), &1i128);
 }
 
-/// A negative lock threshold permanently disables the vote stake requirement.
-///
-/// `voting.rs` rejects a vote when `locked_balance <= threshold`. With a
-/// threshold of -1, a guardian holding nothing evaluates `0 <= -1` as false and
-/// is allowed to vote. `LockThreshold` has no setter, so this cannot be undone.
-/// Zero is legitimate — it means "any non-zero stake" — so only negatives are
-/// rejected.
+#[test]
+fn test_initialize_rejects_zero_lock_threshold() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+    let client = VeroContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract_v2(token_admin);
+
+    let result = client.try_initialize(&admin, &token.address(), &0i128);
+    assert!(result.is_err(), "lock_threshold of 0 must be rejected");
+}
+
 #[test]
 fn test_initialize_rejects_negative_lock_threshold() {
     let env = Env::default();
@@ -93,13 +99,8 @@ fn test_initialize_rejects_negative_lock_threshold() {
 
     let admin = Address::generate(&env);
     let token_admin = Address::generate(&env);
-    let token = env
-        .register_stellar_asset_contract_v2(token_admin)
-        .address();
+    let token = env.register_stellar_asset_contract_v2(token_admin);
 
-    assert!(client.try_initialize(&admin, &token, &-1).is_err());
-
-    // Zero remains valid: it requires a strictly positive locked balance.
-    client.initialize(&admin, &token, &0);
-    assert!(client.get_admin().is_some());
+    let result = client.try_initialize(&admin, &token.address(), &-1i128);
+    assert!(result.is_err(), "negative lock_threshold must be rejected");
 }

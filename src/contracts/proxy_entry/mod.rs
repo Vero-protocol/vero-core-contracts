@@ -36,7 +36,7 @@ pub mod entry_upgrades;
 
 use crate::events;
 use crate::types::{BatchCall, ContractError, DataKey};
-use crate::validation::validate_external_address as validate_address;
+use crate::validation::{validate_external_address as validate_address, validate_lock_threshold};
 use soroban_sdk::{contract, contractimpl, Address, Env};
 
 /// The main entrypoint for the Vero Core contract.
@@ -63,14 +63,7 @@ impl VeroContract {
 
         validate_address(&env, &admin)?;
         validate_address(&env, &token)?;
-        // LockThreshold has no setter, so a bad value here is permanent. voting.rs
-        // rejects a vote when `locked_balance <= threshold`, so a negative
-        // threshold makes `0 <= -1` false and lets a guardian holding nothing
-        // vote. Zero is a legitimate setting meaning "any non-zero stake", so
-        // only negatives are rejected here.
-        if lock_threshold < 0 {
-            return Err(ContractError::InvalidAmount);
-        }
+        validate_lock_threshold(lock_threshold)?;
 
         if env
             .storage()
@@ -183,7 +176,7 @@ impl VeroContract {
                     Self::propose_upgrade(env.clone(), signer, hash)?
                 }
                 BatchCall::ApproveUpgrade(signer) => Self::approve_upgrade(env.clone(), signer)?,
-                BatchCall::ExecuteUpgrade(_signer) => Self::execute_upgrade(env.clone())?,
+                BatchCall::ExecuteUpgrade => Self::execute_upgrade(env.clone())?,
                 BatchCall::CancelUpgrade(admin) => Self::cancel_upgrade(env.clone(), admin)?,
                 BatchCall::StartRewardStream(admin, drips, contributor, task_id) => {
                     Self::start_reward_stream(env.clone(), admin, drips, contributor, task_id)?
@@ -191,7 +184,7 @@ impl VeroContract {
                 BatchCall::TogglePause(admin) => Self::toggle_pause(env.clone(), admin)?,
                 BatchCall::Pause(admin) => Self::pause(env.clone(), admin)?,
                 BatchCall::Unpause(admin) => Self::unpause(env.clone(), admin)?,
-                BatchCall::RecordFailure(reporter) => Self::record_failure(env.clone(), reporter)?,
+                BatchCall::RecordFailure => crate::circuit_breaker::record_failure_anonymous(&env)?,
                 BatchCall::ResetCircuitBreaker(admin) => {
                     Self::reset_circuit_breaker(env.clone(), admin)?;
                 }

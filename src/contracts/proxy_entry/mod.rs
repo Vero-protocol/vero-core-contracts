@@ -56,6 +56,11 @@ impl VeroContract {
         token: Address,
         lock_threshold: i128,
     ) -> Result<(), ContractError> {
+        // Authenticate the account being installed as admin. Without this, an
+        // observer can front-run initialization on a deployed-but-uninitialized
+        // contract and install themselves as Admin.
+        admin.require_auth();
+
         validate_address(&env, &admin)?;
         validate_address(&env, &token)?;
         validate_lock_threshold(lock_threshold)?;

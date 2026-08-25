@@ -124,23 +124,14 @@ pub struct GuardianEntry {
 }
 
 /// A snapshot of the contract state at a specific point in time.
+///
+/// Header metadata is composed via [`SnapshotMeta`] rather than duplicated,
+/// so any new header field only needs to be added in one place.
 #[contracttype]
 #[derive(Clone)]
 pub struct Snapshot {
-    /// Timestamp when the snapshot was recorded.
-    pub timestamp: u64,
-    /// Whether the contract was paused.
-    pub paused: bool,
-    /// Number of failures recorded in the circuit breaker.
-    pub failure_count: u32,
-    /// The weight threshold required to resolve a task.
-    pub weight_threshold: u64,
-    /// The admin address, if set.
-    pub admin: Option<Address>,
-    /// The vault address, if set.
-    pub vault_address: Option<Address>,
-    /// The drips contract address, if set.
-    pub drips_address: Option<Address>,
+    /// Header fields shared with the lightweight [`SnapshotMeta`] view.
+    pub meta: SnapshotMeta,
     /// Map of registered guardian addresses.
     pub guardians: Map<Address, bool>,
     /// Map of guardian reputation scores.
@@ -181,7 +172,7 @@ pub enum BatchCall {
     TogglePause(Address),
     Pause(Address),
     Unpause(Address),
-    RecordFailure(Address),
+    RecordFailure,
     ResetCircuitBreaker(Address),
     EmergencyRecover(Address, Address, i128),
     /// Set multi-sig upgrade signers and threshold.
@@ -191,7 +182,7 @@ pub enum BatchCall {
     /// Approve a pending upgrade.
     ApproveUpgrade(Address),
     /// Execute the upgrade once threshold is met.
-    ExecuteUpgrade(Address),
+    ExecuteUpgrade,
     /// Cancel a pending upgrade.
     CancelUpgrade(Address),
     SetFeeBps(Address, u32),
@@ -224,13 +215,13 @@ impl BatchCall {
             BatchCall::TogglePause(..) => Operation::TogglePause,
             BatchCall::Pause(..) => Operation::Pause,
             BatchCall::Unpause(..) => Operation::Unpause,
-            BatchCall::RecordFailure(..) => Operation::RecordFailure,
+            BatchCall::RecordFailure => Operation::RecordFailure,
             BatchCall::ResetCircuitBreaker(..) => Operation::ResetCircuitBreaker,
             BatchCall::EmergencyRecover(..) => Operation::EmergencyRecover,
             BatchCall::SetUpgradeSigners(..) => Operation::SetUpgradeSigners,
             BatchCall::ProposeUpgrade(..) => Operation::ProposeUpgrade,
             BatchCall::ApproveUpgrade(..) => Operation::ApproveUpgrade,
-            BatchCall::ExecuteUpgrade(..) => Operation::ExecuteUpgrade,
+            BatchCall::ExecuteUpgrade => Operation::ExecuteUpgrade,
             BatchCall::CancelUpgrade(..) => Operation::CancelUpgrade,
             BatchCall::SetFeeBps(..) => Operation::SetFeeBps,
             BatchCall::SetTreasuryAddress(..) => Operation::SetTreasuryAddress,
@@ -362,6 +353,11 @@ pub enum ContractError {
     /// Failure report rejected: the contract is in "trusted reporters only" mode
     /// and the caller is neither a guardian nor an EmergencyManager/Admin.
     UnauthorizedReporter = 41,
+    /// `upgrade_contract` (single-admin path) was called after
+    /// `set_upgrade_signers` configured a multi-sig quorum for this
+    /// deployment; upgrades must go through `propose_upgrade` /
+    /// `approve_upgrade` / `execute_upgrade` instead.
+    SingleSignerUpgradeDisabled = 42,
 }
 
 #[cfg(test)]

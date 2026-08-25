@@ -36,7 +36,7 @@ pub mod entry_upgrades;
 
 use crate::events;
 use crate::types::{BatchCall, ContractError, DataKey};
-use crate::validation::validate_external_address as validate_address;
+use crate::validation::{validate_external_address as validate_address, validate_lock_threshold};
 use soroban_sdk::{contract, contractimpl, Address, Env};
 
 /// The main entrypoint for the Vero Core contract.
@@ -58,6 +58,7 @@ impl VeroContract {
     ) -> Result<(), ContractError> {
         validate_address(&env, &admin)?;
         validate_address(&env, &token)?;
+        validate_lock_threshold(lock_threshold)?;
 
         if env
             .storage()
@@ -170,7 +171,7 @@ impl VeroContract {
                     Self::propose_upgrade(env.clone(), signer, hash)?
                 }
                 BatchCall::ApproveUpgrade(signer) => Self::approve_upgrade(env.clone(), signer)?,
-                BatchCall::ExecuteUpgrade(_signer) => Self::execute_upgrade(env.clone())?,
+                BatchCall::ExecuteUpgrade => Self::execute_upgrade(env.clone())?,
                 BatchCall::CancelUpgrade(admin) => Self::cancel_upgrade(env.clone(), admin)?,
                 BatchCall::StartRewardStream(admin, drips, contributor, task_id) => {
                     Self::start_reward_stream(env.clone(), admin, drips, contributor, task_id)?
@@ -178,7 +179,7 @@ impl VeroContract {
                 BatchCall::TogglePause(admin) => Self::toggle_pause(env.clone(), admin)?,
                 BatchCall::Pause(admin) => Self::pause(env.clone(), admin)?,
                 BatchCall::Unpause(admin) => Self::unpause(env.clone(), admin)?,
-                BatchCall::RecordFailure(reporter) => Self::record_failure(env.clone(), reporter)?,
+                BatchCall::RecordFailure => crate::circuit_breaker::record_failure_anonymous(&env)?,
                 BatchCall::ResetCircuitBreaker(admin) => {
                     Self::reset_circuit_breaker(env.clone(), admin)?;
                 }

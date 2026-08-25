@@ -16,7 +16,7 @@ fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
     let client = VeroContractClient::new(&env, &contract_id);
 
-    client.initialize(&admin, &token, &0);
+    client.initialize(&admin, &token, &1);
     client.grant_role(&admin, &admin, &Role::GuardianManager);
     client.grant_role(&admin, &admin, &Role::TaskManager);
 
@@ -27,8 +27,8 @@ fn add_voter(env: &Env, client: &VeroContractClient, admin: &Address, token: &Ad
     let guardian = Address::generate(env);
     client.add_guardian(admin, &guardian);
     client.set_reputation(admin, &guardian, &100);
-    TestTokenClient::new(env, token).mint(&guardian, &1);
-    client.lock_tokens(&guardian, &1);
+    TestTokenClient::new(env, token).mint(&guardian, &2);
+    client.lock_tokens(&guardian, &2);
     guardian
 }
 

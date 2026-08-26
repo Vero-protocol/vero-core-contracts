@@ -70,9 +70,8 @@ fn setup_with_lock_threshold(
     let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
     let client = VeroContractClient::new(&env, &contract_id);
 
-    // Initialize with lock threshold of 0 so tests that don't lock tokens
-    // can still vote. Tests that exercise token locking set their own thresholds.
-    client.initialize(&admin, &token, &0i128);
+    // Initialize with the provided lock threshold.
+    client.initialize(&admin, &token, &lock_threshold);
 
     (env, admin, token, client)
 }
@@ -175,7 +174,7 @@ fn valid_admin_config_update_succeeds() {
     assert_eq!(client.get_reputation(&guardian), Some(500));
 
     let snapshot = client.get_snapshot();
-    assert_eq!(snapshot.vault_address, Some(vault));
+    assert_eq!(snapshot.meta.vault_address, Some(vault));
 }
 
 #[test]
@@ -193,22 +192,22 @@ fn test_set_and_get_reputation() {
 }
 
 #[test]
-fn test_calculate_voting_power_returns_score() {
+fn test_get_reputation_returns_score() {
     let (env, _contract_id, admin, _token, client) = setup();
     let guardian = Address::generate(&env);
 
     client.add_guardian(&admin, &guardian);
     client.set_reputation(&admin, &guardian, &150u64);
 
-    assert_eq!(client.calculate_voting_power(&guardian), Some(150));
+    assert_eq!(client.get_reputation(&guardian), Some(150));
 }
 
 #[test]
-fn test_calculate_voting_power_none_for_unset() {
+fn test_get_reputation_none_for_unset() {
     let (env, _contract_id, _admin, _token, client) = setup();
     let stranger = Address::generate(&env);
 
-    assert_eq!(client.calculate_voting_power(&stranger), None);
+    assert_eq!(client.get_reputation(&stranger), None);
 }
 
 // ─── Weighted consensus ─────────────────────────────────────────────
@@ -461,7 +460,10 @@ fn vault_address_validation_rejects_self_without_mutation() {
     let vault = Address::generate(&env);
 
     client.set_vault_address(&admin, &vault);
-    assert_eq!(client.get_snapshot().vault_address, Some(vault.clone()));
+    assert_eq!(
+        client.get_snapshot().meta.vault_address,
+        Some(vault.clone())
+    );
 }
 
 #[test]
@@ -475,7 +477,7 @@ fn test_reputation_can_be_updated() {
 
     client.set_reputation(&admin, &g, &500u64);
     assert_eq!(client.get_reputation(&g), Some(500));
-    assert_eq!(client.calculate_voting_power(&g), Some(500));
+    assert_eq!(client.get_reputation(&g), Some(500));
 }
 
 // ─── Drips integration ─────────────────────────────────────────────
@@ -840,8 +842,8 @@ fn legacy_voting_power_views_still_pass() {
     let guardian = add_guardian_with_rep(&env, &client, &admin, 150);
     let stranger = Address::generate(&env);
 
-    assert_eq!(client.calculate_voting_power(&guardian), Some(150));
-    assert_eq!(client.calculate_voting_power(&stranger), None);
+    assert_eq!(client.get_reputation(&guardian), Some(150));
+    assert_eq!(client.get_reputation(&stranger), None);
     client.register_task(&admin, &303u64, &1u32, &1u32);
 
     let _ = client.try_vote(&stranger, &303u64);
@@ -951,7 +953,7 @@ fn test_contract_paused_error_on_set_reputation() {
 
     client.set_reputation(&admin, &guardian, &500);
     assert_eq!(client.get_reputation(&guardian), Some(500));
-    assert_eq!(client.calculate_voting_power(&guardian), Some(500));
+    assert_eq!(client.get_reputation(&guardian), Some(500));
 }
 
 #[test]
@@ -1200,7 +1202,7 @@ fn test_migrate_storage_requires_admin_auth() {
         .address();
     let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
     let client = VeroContractClient::new(&env, &contract_id);
-    client.initialize(&admin, &token, &0i128);
+    client.initialize(&admin, &token, &1i128);
 
     let stranger = Address::generate(&env);
     let result = client.try_migrate_storage(&stranger);

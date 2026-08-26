@@ -11,22 +11,38 @@ use crate::events;
 use crate::types::{ContractError, DataKey, Role};
 use crate::utils::address::is_strictly_sorted_addresses;
 use crate::validation::validate_external_address as validate_address;
-use soroban_sdk::{panic_with_error, Address, BytesN, Env, Vec};
+use soroban_sdk::{Address, BytesN, Env, Vec};
 
 /// Immediately replace the contract's WASM code. Callable only by the
 /// contract admin.
 ///
-/// This is the single-admin upgrade path; the multi-sig flow below
-/// (`set_upgrade_signers` / `propose_upgrade` / `approve_upgrade` /
-/// `execute_upgrade`) offers the quorum-gated alternative.
-pub fn upgrade_contract(env: Env, admin: Address, new_wasm_hash: BytesN<32>) {
-    if validate_address(&env, &admin).is_err() {
-        panic_with_error!(env, ContractError::InvalidAddress);
+/// This is a bootstrap-only escape hatch for deployments that have not yet
+/// configured multi-sig upgrade signers. Once `set_upgrade_signers` has been
+/// called for this deployment, this path is permanently disabled and all
+/// upgrades must go through the quorum-gated flow (`propose_upgrade` /
+/// `approve_upgrade` / `execute_upgrade`).
+///
+/// # Errors
+/// * `InvalidAddress` — the admin is the zero address or the contract itself.
+/// * `NotAuthorized` — the caller does not hold the `Admin` role.
+/// * `SingleSignerUpgradeDisabled` — multi-sig upgrade signers are configured
+///   for this deployment; use the multi-sig flow instead.
+pub fn upgrade_contract(
+    env: Env,
+    admin: Address,
+    new_wasm_hash: BytesN<32>,
+) -> Result<(), ContractError> {
+    validate_address(&env, &admin)?;
+    require_role(&env, &admin, Role::Admin)?;
+
+    if env.storage().instance().has(&DataKey::UpgradeSigners) {
+        return Err(ContractError::SingleSignerUpgradeDisabled);
     }
-    require_role(&env, &admin, Role::Admin).unwrap();
+
     env.deployer()
         .update_current_contract_wasm(new_wasm_hash.clone());
     events::emit_contract_upgraded(&env, &admin, &new_wasm_hash);
+    Ok(())
 }
 
 /// Configure the list of authorized upgrade signers and the required quorum.

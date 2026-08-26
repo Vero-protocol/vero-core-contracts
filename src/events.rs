@@ -237,7 +237,11 @@ mod tests {
         });
 
         let published = env.events().all();
+        // SAFETY: this test just published an event above, so the event log
+        // is non-empty and `last()` is provably `Some`. Test-only code.
         let (_contract, _topics, data) = published.last().unwrap();
+        // SAFETY: `emit_task_resolved` publishes exactly `(u64, u64)`, so the
+        // `try_into_val` into that tuple cannot fail. Test-only code.
         let (task_id, weight): (u64, u64) = data.try_into_val(&env).unwrap();
         assert_eq!(task_id, big_task_id);
         assert_eq!(weight, big_weight);
@@ -256,7 +260,12 @@ mod tests {
         });
 
         let published = env.events().all();
+        // SAFETY: this test just published an event above, so the event log
+        // is non-empty and `last()` is provably `Some`. Test-only code.
         let (_contract, _topics, data) = published.last().unwrap();
+        // SAFETY: `emit_weighted_vote` publishes exactly
+        // `(Address, u64, u64)`, so the `try_into_val` into that tuple cannot
+        // fail. Test-only code.
         let (g, task_id, weight): (Address, u64, u64) = data.try_into_val(&env).unwrap();
         assert_eq!(g, guardian);
         assert_eq!(task_id, big_task_id);

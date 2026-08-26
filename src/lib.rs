@@ -8,6 +8,10 @@
 #![warn(missing_docs)]
 
 mod circuit_breaker;
+// The Soroban contract surface (entrypoints, shared logic, RBAC, storage
+// layout and upgrades) lives under `contracts/`; see `contracts/mod.rs` for
+// the documented boundary. Domain primitives composed by that surface stay at
+// the crate root.
 mod contracts;
 
 /// Pure consensus logic.
@@ -31,7 +35,6 @@ mod timelock;
 mod types;
 mod utils;
 mod validation;
-mod vault;
 
 pub use contracts::proxy_entry::{VeroContract, VeroContractClient};
 pub use types::{

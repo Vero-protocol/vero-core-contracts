@@ -236,3 +236,112 @@ pub fn migrate(env: &Env) -> Result<(), ContractError> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    // Synthetic failing migration for future v1 -> v2 authors.
+    //
+    // This helper stages multiple storage mutations (an update, an addition,
+    // and a removal) plus an invalid `FeeBps`, runs the same pre-flight
+    // validation that real migrations use, and returns the validation error
+    // WITHOUT committing. It is compiled only for unit-test builds and is
+    // excluded from production builds via `#[cfg(test)]`.
+    fn synthetic_failing_v1_to_v2(env: &Env) -> Result<(), ContractError> {
+        let mut cache = MigrationCache::new(env);
+
+        // Stage a legitimate update to an existing key.
+        cache.set(&DataKey::WeightThreshold, &1000u64);
+
+        // Stage a legitimate addition of a brand-new key.
+        cache.set(
+            &DataKey::LockedBalance(env.current_contract_address()),
+            &100i128,
+        );
+
+        // Stage a legitimate removal of an existing key.
+        cache.remove(&DataKey::Task(1));
+
+        // Inject an invalid FeeBps that must fail pre-flight validation.
+        cache.set(&DataKey::FeeBps, &10001u32);
+
+        // Pre-flight validation must fail before commit is ever reached.
+        validate_migration(env, &cache)?;
+        cache.commit();
+
+        Ok(())
+    }
+
+    // Future migration authors: use `failing_multi_key_migration_rolls_back_all_staged_changes`
+    // as the template for testing multi-key migrations. Stage updates, additions, and removals,
+    // force validation to fail, and assert that real storage remains byte-for-byte unchanged.
+    #[test]
+    fn failing_multi_key_migration_rolls_back_all_staged_changes() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, crate::VeroContract);
+        let contract_addr = contract_id.clone();
+
+        env.as_contract(&contract_id, || {
+            // ── Seed pre-migration on-chain state ─────────────────────
+            env.storage()
+                .instance()
+                .set(&DataKey::StorageVersion, &CURRENT_VERSION);
+            env.storage().instance().set(&DataKey::FeeBps, &25u32); // original valid fee
+            env.storage()
+                .instance()
+                .set(&DataKey::WeightThreshold, &500u64); // to be updated
+            env.storage().instance().set(&DataKey::Task(1), &7u64); // to be removed
+                                                                    // DataKey::LockedBalance(contract) intentionally NOT seeded (new key).
+
+            // ── Stage several changes, then force validation to fail ──
+            let mut cache = MigrationCache::new(&env);
+            cache.set(&DataKey::WeightThreshold, &1000u64);
+            cache.set(&DataKey::LockedBalance(contract_addr.clone()), &100i128);
+            cache.remove(&DataKey::Task(1));
+            cache.set(&DataKey::FeeBps, &10001u32);
+
+            // Staged state is present before validation (proves the test is not vacuous).
+            assert_eq!(cache.get::<u64>(&DataKey::WeightThreshold), Some(1000));
+            assert_eq!(
+                cache.get::<i128>(&DataKey::LockedBalance(contract_addr.clone())),
+                Some(100)
+            );
+            assert_eq!(cache.get::<u64>(&DataKey::Task(1)), None);
+            assert_eq!(cache.get::<u32>(&DataKey::FeeBps), Some(10001));
+
+            // Validation must fail before commit is reached.
+            let result = validate_migration(&env, &cache);
+            assert_eq!(result, Err(ContractError::InvalidConfig));
+
+            // ── Real storage must remain completely unchanged ─────────
+            // Updated key retains its original value.
+            assert_eq!(
+                env.storage()
+                    .instance()
+                    .get::<_, u64>(&DataKey::WeightThreshold),
+                Some(500)
+            );
+            // New key remains absent.
+            assert_eq!(
+                env.storage()
+                    .instance()
+                    .get::<_, i128>(&DataKey::LockedBalance(contract_addr)),
+                None
+            );
+            // Removed key is still present with its original value.
+            assert_eq!(
+                env.storage().instance().get::<_, u64>(&DataKey::Task(1)),
+                Some(7)
+            );
+            // Original fee remains unchanged.
+            assert_eq!(
+                env.storage().instance().get::<_, u32>(&DataKey::FeeBps),
+                Some(25)
+            );
+            // Migration version is not advanced.
+            assert_eq!(get_version(&env), CURRENT_VERSION);
+        });
+    }
+}

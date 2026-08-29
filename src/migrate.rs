@@ -240,7 +240,6 @@ pub fn migrate(env: &Env) -> Result<(), ContractError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::testutils::Address as _;
 
     // Synthetic failing migration for future v1 -> v2 authors.
     //
@@ -249,6 +248,7 @@ mod tests {
     // validation that real migrations use, and returns the validation error
     // WITHOUT committing. It is compiled only for unit-test builds and is
     // excluded from production builds via `#[cfg(test)]`.
+    #[allow(dead_code)]
     fn synthetic_failing_v1_to_v2(env: &Env) -> Result<(), ContractError> {
         let mut cache = MigrationCache::new(env);
 

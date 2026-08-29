@@ -44,6 +44,7 @@ fn generate_signers(env: &Env, n: u32) -> Vec<Address> {
 }
 
 /// Helper to collect all events into a vector of event symbols for assertion.
+#[allow(dead_code)]
 fn event_symbols(env: &Env) -> Vec<soroban_sdk::Symbol> {
     let mut symbols = Vec::new(env);
     for e in env.events().all().iter() {
@@ -400,7 +401,7 @@ fn test_propose_same_hash_adds_approval() {
     // Signer 2 also proposes with same hash — acts as approval
     let signer2 = signers.get(1).unwrap();
     let result = client.try_propose_upgrade(&signer2, &wasm_hash);
-    result.unwrap();
+    let _ = result.unwrap();
 
     // Signer 3 approves via approve_upgrade
     let signer3 = signers.get(2).unwrap();

@@ -108,7 +108,7 @@ fn test_initialize_rejects_negative_lock_threshold() {
 #[test]
 fn test_default_weight_threshold_is_valid_and_setter_enforces_bounds() {
     use vero_core_contracts::limits::MAX_WEIGHT_THRESHOLD;
-    use vero_core_contracts::ContractError;
+    use vero_core_contracts::{ContractError, Role};
 
     let env = Env::default();
     env.mock_all_auths();
@@ -120,6 +120,7 @@ fn test_default_weight_threshold_is_valid_and_setter_enforces_bounds() {
     let token = env.register_stellar_asset_contract_v2(token_admin);
 
     client.initialize(&admin, &token.address(), &100i128);
+    client.grant_role(&admin, &admin, &Role::ConfigManager);
 
     // Initial default threshold is 300
     assert_eq!(client.get_weight_threshold(), 300);

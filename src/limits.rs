@@ -6,7 +6,7 @@
 //! `contracts/logic.rs`, `task.rs`, and `validation.rs`.
 
 /// Maximum batch size for a single `register_task` call.
-pub(crate) const MAX_REGISTER_TASK_BATCH_SIZE: u32 = 32;
+pub const MAX_REGISTER_TASK_BATCH_SIZE: u32 = 32;
 
 /// Maximum number of entries `get_snapshot`/`record_snapshot` will read from
 /// any single tracked collection (guardians, tasks, reward streams) before
@@ -24,25 +24,26 @@ pub(crate) const MAX_REGISTER_TASK_BATCH_SIZE: u32 = 32;
 /// `O(limit)` entries per call — not `O(total collection size)` — and stays
 /// cheaply invokable well past the point this cap would refuse to build a
 /// full snapshot.
-pub(crate) const MAX_SNAPSHOT_COLLECTION_SIZE: u32 = 200;
+pub const MAX_SNAPSHOT_COLLECTION_SIZE: u32 = 200;
 
 /// Maximum number of entries any paginated snapshot call will return,
 /// regardless of the caller-requested `limit`. Keeps a single page call's
 /// cost bounded even against a hostile/misconfigured caller.
-pub(crate) const MAX_PAGE_LIMIT: u32 = 50;
+pub const MAX_PAGE_LIMIT: u32 = 50;
 
 /// Maximum allowed task id (`u64::MAX / 2`), so ids stay comfortably below
 /// `u64::MAX` and away from overflow-prone math elsewhere.
-pub(crate) const MAX_TASK_ID: u64 = u64::MAX / 2;
+pub const MAX_TASK_ID: u64 = u64::MAX / 2;
 
 /// Upper bound for token amounts locked/transferred by the contract.
-pub(crate) const MAX_TOKEN_AMOUNT: i128 = i128::MAX / 2;
+pub const MAX_TOKEN_AMOUNT: i128 = i128::MAX / 2;
 
 /// Upper bound for the vote-lock threshold, one below `MAX_TOKEN_AMOUNT`.
-pub(crate) const MAX_LOCK_THRESHOLD: i128 = MAX_TOKEN_AMOUNT - 1;
+pub const MAX_LOCK_THRESHOLD: i128 = MAX_TOKEN_AMOUNT - 1;
 
 /// Upper bound for a single guardian's reputation score.
-pub(crate) const MAX_REPUTATION_SCORE: u64 = 1_000_000_000;
+pub const MAX_REPUTATION_SCORE: u64 = 1_000_000_000;
 
-/// Upper bound for the cumulative weight required to resolve a task.
-pub(crate) const MAX_WEIGHT_THRESHOLD: u64 = 1_000_000_000_000;
+/// Upper bound for the cumulative weight required to resolve a task. Enforced by both
+/// the live setter (`set_weight_threshold`) and migration pre-flight checks (`validate_migration`).
+pub const MAX_WEIGHT_THRESHOLD: u64 = 1_000_000_000_000;

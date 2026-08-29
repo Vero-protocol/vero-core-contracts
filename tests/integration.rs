@@ -35,10 +35,16 @@ fn test_end_to_end_happy_path() {
     client.grant_role(&admin, &admin, &Role::GuardianManager);
     client.grant_role(&admin, &admin, &Role::TaskManager);
     client.grant_role(&admin, &admin, &Role::TreasuryManager);
+    client.grant_role(&admin, &admin, &Role::ConfigManager);
 
     assert!(client.has_role(&admin, &Role::GuardianManager));
     assert!(client.has_role(&admin, &Role::TaskManager));
     assert!(client.has_role(&admin, &Role::TreasuryManager));
+    assert!(client.has_role(&admin, &Role::ConfigManager));
+
+    // Configure custom weight threshold
+    client.set_weight_threshold(&admin, &300u64);
+    assert_eq!(client.get_weight_threshold(), 300);
 
     let guardian = Address::generate(&env);
     client.add_guardian(&admin, &guardian);

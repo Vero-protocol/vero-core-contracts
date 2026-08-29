@@ -551,6 +551,29 @@ fn test_batch_execute_with_upgrade_operations() {
 }
 
 #[test]
+fn test_batch_execute_with_set_weight_threshold_validation() {
+    let (env, _contract_id, admin, _token, client) = setup();
+
+    // Valid threshold in batch succeeds
+    let calls = soroban_sdk::vec![
+        &env,
+        vero_core_contracts::BatchCall::SetWeightThreshold(admin.clone(), 500u64),
+    ];
+    let result = client.try_batch_execute(&calls);
+    assert!(result.is_ok());
+    assert_eq!(client.get_weight_threshold(), 500);
+
+    // Invalid threshold (0) in batch reverts
+    let invalid_calls = soroban_sdk::vec![
+        &env,
+        vero_core_contracts::BatchCall::SetWeightThreshold(admin.clone(), 0u64),
+    ];
+    let result = client.try_batch_execute(&invalid_calls);
+    assert!(result.is_err());
+    assert_eq!(client.get_weight_threshold(), 500); // Unchanged
+}
+
+#[test]
 fn test_batch_execute_with_execute_upgrade_variant() {
     let (env, _contract_id, _admin, _token, client) = setup();
 

@@ -206,6 +206,19 @@ fn test_gas_budget_set_weight_threshold() {
 }
 
 #[test]
+fn test_gas_budget_set_weight_threshold_invalid_rejected_early() {
+    let (env, _, admin, _, client) = setup();
+
+    let result = client.try_set_weight_threshold(&admin, &0);
+    assert!(result.is_err());
+    assert_budget_limit!(
+        env,
+        COST_SET_WEIGHT_THRESHOLD,
+        "set_weight_threshold_rejected"
+    );
+}
+
+#[test]
 fn test_gas_budget_toggle_pause() {
     let (env, _, admin, _, client) = setup();
     client.grant_role(&admin, &admin, &Role::EmergencyManager);

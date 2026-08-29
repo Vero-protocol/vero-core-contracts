@@ -72,3 +72,23 @@ fn vote_uses_verified_consensus_boundaries() {
     client.vote(&guardian, &3);
     assert!(client.get_task(&3).unwrap().is_done);
 }
+
+#[test]
+fn test_vote_respects_dynamically_configured_weight_threshold() {
+    let (env, _contract_id, admin, token, client) = setup();
+    client.grant_role(&admin, &admin, &Role::ConfigManager);
+
+    // Update threshold from default 300 to 200
+    client.set_weight_threshold(&admin, &200);
+    assert_eq!(client.get_weight_threshold(), 200);
+
+    let guardian = add_voter(&env, &client, &admin, &token);
+    client.set_reputation(&admin, &guardian, &200);
+
+    client.register_task(&admin, &10, &1);
+    client.vote(&guardian, &10);
+
+    let task = client.get_task(&10).unwrap();
+    assert!(task.is_done);
+    assert_eq!(task.total_weight_accrued, 200);
+}

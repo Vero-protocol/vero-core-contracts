@@ -88,3 +88,24 @@ Added 8 comprehensive tests:
 
 ## Branch
 `feat/69-treasury-timelock`
+
+---
+
+# Issue #306: Validate Weight Threshold Setter Implementation Summary
+
+## Overview
+Prevented `set_weight_threshold` from writing thresholds that `migrate::validate_migration` pre-flight is designed to reject (`0` and `> MAX_WEIGHT_THRESHOLD`), ensuring live state cannot bypass consensus voting or poison future migrations.
+
+## Changes Made
+1. **Live Setter Validation (`src/contracts/proxy_entry/entry_config.rs`)**:
+   - Integrated `crate::validation::validate_weight_threshold(threshold)?` before storage write.
+   - Documented `InvalidAmount` (for 0) and `InvalidRange` (for > `MAX_WEIGHT_THRESHOLD`) in doc comments.
+2. **Validation Helpers & Documentation (`src/validation.rs`, `src/limits.rs`)**:
+   - Added unit tests for `validate_weight_threshold`.
+   - Updated `MAX_WEIGHT_THRESHOLD` documentation and public visibility.
+3. **Property Testing (`tests/property_tests.rs`)**:
+   - Property tests proving any threshold accepted by `set_weight_threshold` is accepted by `validate_migration`.
+   - Property tests verifying rejection equivalence across the entire `u64` domain.
+4. **Integration & Safety Coverage across 15+ Files**:
+   - `tests/test.rs`, `tests/safety_invariants.rs`, `tests/consensus.rs`, `tests/rbac_tests.rs`, `tests/init.rs`, `tests/gas_budget.rs`, `tests/circuit_breaker_dos.rs`, `tests/zero_address_validation.rs`, `tests/upgrade.rs`, `tests/consensus_delegation.rs`, `tests/integration.rs`, etc.
+

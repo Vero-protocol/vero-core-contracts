@@ -14,7 +14,7 @@
 //! * [`entry_circuit_breaker`] — pause & failure reporting
 //! * [`entry_guardians`] — guardians & reputation
 //! * [`entry_tokens`] — token locking & emergency recovery
-//! * [`entry_config`] — fee / treasury / threshold config
+//! * [`entry_config`] — fee / treasury / threshold config (bounded and validated against migration pre-flight)
 //! * [`entry_tasks`] — task registration & voting
 //! * [`entry_rewards`] — reward (drips) streams
 //! * [`entry_upgrades`] — immediate & multi-sig upgrades

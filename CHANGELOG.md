@@ -56,9 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sanitize administrative inputs and validate input ranges (#94, #97)
 - Fix compile errors and missing `testutils::Address` import after fee changes (#123)
 - Add end-to-end happy-path integration test for #137 (#188)
+- Validate weight threshold in `set_weight_threshold` with identical bounds as `validate_migration` (`1..=MAX_WEIGHT_THRESHOLD`), preventing zero-threshold consensus bypass and storage poisoning (#306)
 
 ### Security
 - CI build/test workflow and dependency security scanning added (#176)
+- Consensus threshold validation in `set_weight_threshold` prevents writing zero threshold that disables weighted voting and poisons future migrations (#306)
 
 ---
 

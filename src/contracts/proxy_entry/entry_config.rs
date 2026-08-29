@@ -14,6 +14,15 @@ use soroban_sdk::{contractimpl, Address, Env};
 
 #[contractimpl]
 impl VeroContract {
+    /// Sets the voting weight threshold required for task resolution. Callable
+    /// by the contract admin or a `ConfigManager` while the contract is not paused.
+    ///
+    /// # Errors
+    /// * `InvalidAddress` — the admin address is the zero address or the contract itself.
+    /// * `ContractPaused` — the contract is paused.
+    /// * `NotAuthorized` — the caller does not hold the `ConfigManager` role.
+    /// * `InvalidAmount` — the threshold is 0.
+    /// * `InvalidRange` — the threshold exceeds `MAX_WEIGHT_THRESHOLD`.
     pub fn set_weight_threshold(
         env: Env,
         admin: Address,
@@ -22,6 +31,7 @@ impl VeroContract {
         validate_address(&env, &admin)?;
         circuit_breaker::require_not_paused(&env)?;
         crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::ConfigManager)?;
+        crate::validation::validate_weight_threshold(threshold)?;
         env.storage()
             .instance()
             .set(&DataKey::WeightThreshold, &threshold);

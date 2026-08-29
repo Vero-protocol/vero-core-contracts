@@ -132,3 +132,23 @@ fn test_consensus_state_default_is_new() {
     assert_eq!(via_new.votes, 0);
     assert!(!via_new.is_done);
 }
+
+#[test]
+fn test_consensus_resolves_at_maximum_allowed_threshold() {
+    use vero_core_contracts::limits::MAX_WEIGHT_THRESHOLD;
+
+    let mut state = ConsensusState::new();
+    apply_vote(&mut state, MAX_WEIGHT_THRESHOLD, MAX_WEIGHT_THRESHOLD).unwrap();
+    assert!(state.is_done);
+    assert_eq!(state.total_weight_accrued, MAX_WEIGHT_THRESHOLD);
+    assert!(resolution_invariant_holds(&state, MAX_WEIGHT_THRESHOLD));
+}
+
+#[test]
+fn test_consensus_resolves_at_minimum_valid_threshold() {
+    let mut state = ConsensusState::new();
+    apply_vote(&mut state, 1, 1).unwrap();
+    assert!(state.is_done);
+    assert_eq!(state.total_weight_accrued, 1);
+    assert!(resolution_invariant_holds(&state, 1));
+}

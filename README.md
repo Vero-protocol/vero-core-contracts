@@ -121,6 +121,16 @@ client.grant_role(&admin, &admin, &Role::EmergencyManager);
 client.grant_role(&admin, &admin, &Role::TreasuryManager);
 ```
 
+### Configure protocol parameters
+
+```rust
+// Requires Role::ConfigManager. Validates threshold is in 1..=MAX_WEIGHT_THRESHOLD
+client.set_weight_threshold(&admin, &500u64);
+
+// Set fee basis points (up to 1000 bps = 10%)
+client.set_fee_bps(&admin, &25u32);
+```
+
 ### Add a guardian and set reputation
 
 ```rust

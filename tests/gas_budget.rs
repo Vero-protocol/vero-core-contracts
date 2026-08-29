@@ -38,7 +38,7 @@ fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     let token = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_addr = token.address();
 
-    client.initialize(&admin, &token_addr, &0i128);
+    client.initialize(&admin, &token_addr, &1i128);
     client.grant_role(&admin, &admin, &Role::GuardianManager);
     client.grant_role(&admin, &admin, &Role::ConfigManager);
     client.grant_role(&admin, &admin, &Role::TaskManager);
@@ -61,8 +61,8 @@ fn add_guardian_with_rep(
     let guardian = Address::generate(env);
     client.add_guardian(admin, &guardian);
     client.set_reputation(admin, &guardian, &score);
-    TestTokenClient::new(env, token).mint(&guardian, &1);
-    client.lock_tokens(&guardian, &1);
+    TestTokenClient::new(env, token).mint(&guardian, &2);
+    client.lock_tokens(&guardian, &2);
     guardian
 }
 

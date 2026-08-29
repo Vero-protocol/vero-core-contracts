@@ -23,7 +23,7 @@
 use soroban_sdk::{testutils::Address as _, Address, Env};
 use vero_core_contracts::{ContractError, Role, VeroContractClient};
 
-const LOCK_THRESHOLD: i128 = 0;
+const LOCK_THRESHOLD: i128 = 1;
 
 fn setup() -> (Env, Address, VeroContractClient<'static>) {
     let env = Env::default();

@@ -61,10 +61,6 @@ impl VeroContract {
         reputation::get_reputation(&env, &guardian)
     }
 
-    pub fn calculate_voting_power(env: Env, guardian: Address) -> Option<u64> {
-        reputation::calculate_voting_power(&env, &guardian)
-    }
-
     pub fn resign_guardian(env: Env, guardian: Address) -> Result<(), ContractError> {
         validate_address(&env, &guardian)?;
         logic::resign_guardian(&env, guardian)

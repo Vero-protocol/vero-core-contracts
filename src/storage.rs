@@ -1,6 +1,8 @@
 use crate::types::{ContractError, DataKey, Task};
 use soroban_sdk::{Address, Env, Vec};
 
+/// Minimum age (in seconds) a resolved task must reach before it can be archived.
+/// Equivalent to 30 days.
 pub const ARCHIVE_AFTER_SECONDS: u64 = 30 * 24 * 60 * 60;
 
 pub fn active_task_key(task_id: u64) -> DataKey {

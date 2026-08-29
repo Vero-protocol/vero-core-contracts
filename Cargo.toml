@@ -12,7 +12,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = { version = "21.0.0", features = ["alloc"] }
-vero-consensus = { path = "consensus" }
+vero-consensus = { path = "consensus", version = "0.1.0" }
 
 [dev-dependencies]
 soroban-sdk = { version = "21.0.0", features = ["testutils"] }

@@ -4,7 +4,7 @@ use soroban_sdk::{
     testutils::{Address as _, Events as _},
     Address, BytesN, Env, TryIntoVal, Vec,
 };
-use vero_core_contracts::{Role, VeroContractClient};
+use vero_core_contracts::{ContractError, Role, VeroContractClient};
 
 fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     let env = Env::default();

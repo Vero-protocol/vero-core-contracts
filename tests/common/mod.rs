@@ -8,11 +8,5 @@ pub struct MockDripsContract;
 
 #[contractimpl]
 impl MockDripsContract {
-    pub fn start_stream(
-        _env: Env,
-        _contributor: Address,
-        _task_id: u64,
-        _resolution_status: u32,
-    ) {
-    }
+    pub fn start_stream(_env: Env, _contributor: Address, _task_id: u64, _resolution_status: u32) {}
 }

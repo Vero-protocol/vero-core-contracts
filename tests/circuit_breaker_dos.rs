@@ -406,3 +406,23 @@ fn test_batch_execute_with_record_failure_variant() {
 
     assert_eq!(client.get_failure_count(), 1);
 }
+
+/// When the contract is paused, `set_weight_threshold` is rejected with `ContractPaused`.
+#[test]
+fn test_set_weight_threshold_rejected_while_paused() {
+    let (_env, admin, client) = setup();
+
+    client.grant_role(&admin, &admin, &vero_core_contracts::Role::EmergencyManager);
+    client.grant_role(&admin, &admin, &vero_core_contracts::Role::ConfigManager);
+
+    client.pause(&admin);
+
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &500),
+        Err(Ok(ContractError::ContractPaused))
+    );
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &0),
+        Err(Ok(ContractError::ContractPaused))
+    );
+}

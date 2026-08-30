@@ -5,6 +5,7 @@ use crate::limits::{
 };
 use crate::types::ContractError;
 
+/// Validates that an address is well-formed and is not the contract itself.
 pub fn validate_external_address(env: &Env, address: &Address) -> Result<(), ContractError> {
     crate::utils::address::validate_address(env, address)?;
     if address == &env.current_contract_address() {
@@ -13,6 +14,7 @@ pub fn validate_external_address(env: &Env, address: &Address) -> Result<(), Con
     Ok(())
 }
 
+/// Validates that two addresses are not identical.
 pub fn validate_distinct_addresses(left: &Address, right: &Address) -> Result<(), ContractError> {
     if left == right {
         return Err(ContractError::InvalidAddress);
@@ -20,10 +22,12 @@ pub fn validate_distinct_addresses(left: &Address, right: &Address) -> Result<()
     Ok(())
 }
 
+/// Validates that an admin address is well-formed and not the contract itself.
 pub fn validate_admin_address(env: &Env, admin: &Address) -> Result<(), ContractError> {
     validate_external_address(env, admin)
 }
 
+/// Validates reward stream parameters including drips address, contributor address, and task id.
 pub fn validate_reward_stream_config(
     env: &Env,
     drips_address: &Address,
@@ -48,6 +52,7 @@ pub fn validate_task_id(task_id: u64) -> Result<(), ContractError> {
     Ok(())
 }
 
+/// Validates that a token amount is positive and within `MAX_TOKEN_AMOUNT`.
 pub fn validate_token_amount(amount: i128) -> Result<(), ContractError> {
     if amount <= 0 {
         return Err(ContractError::InvalidAmount);
@@ -58,6 +63,7 @@ pub fn validate_token_amount(amount: i128) -> Result<(), ContractError> {
     Ok(())
 }
 
+/// Validates that a lock threshold is positive and within `MAX_LOCK_THRESHOLD`.
 pub fn validate_lock_threshold(lock_threshold: i128) -> Result<(), ContractError> {
     if lock_threshold <= 0 {
         return Err(ContractError::InvalidAmount);
@@ -68,6 +74,7 @@ pub fn validate_lock_threshold(lock_threshold: i128) -> Result<(), ContractError
     Ok(())
 }
 
+/// Validates that a reputation score is positive and within `MAX_REPUTATION_SCORE`.
 pub fn validate_reputation_score(score: u64) -> Result<(), ContractError> {
     if score == 0 {
         return Err(ContractError::InvalidAmount);
@@ -78,6 +85,7 @@ pub fn validate_reputation_score(score: u64) -> Result<(), ContractError> {
     Ok(())
 }
 
+/// Validates that a weight threshold is non-zero and does not exceed `MAX_WEIGHT_THRESHOLD`.
 pub fn validate_weight_threshold(threshold: u64) -> Result<(), ContractError> {
     if threshold == 0 {
         return Err(ContractError::InvalidAmount);
@@ -108,6 +116,33 @@ mod tests {
         assert_eq!(
             validate_task_id(MAX_TASK_ID + 1),
             Err(ContractError::InvalidConfig)
+        );
+    }
+
+    #[test]
+    fn test_validate_weight_threshold_zero_rejected() {
+        assert_eq!(
+            validate_weight_threshold(0),
+            Err(ContractError::InvalidAmount)
+        );
+    }
+
+    #[test]
+    fn test_validate_weight_threshold_valid_range() {
+        assert_eq!(validate_weight_threshold(1), Ok(()));
+        assert_eq!(validate_weight_threshold(500), Ok(()));
+        assert_eq!(validate_weight_threshold(MAX_WEIGHT_THRESHOLD), Ok(()));
+    }
+
+    #[test]
+    fn test_validate_weight_threshold_exceeds_max_rejected() {
+        assert_eq!(
+            validate_weight_threshold(MAX_WEIGHT_THRESHOLD + 1),
+            Err(ContractError::InvalidRange)
+        );
+        assert_eq!(
+            validate_weight_threshold(u64::MAX),
+            Err(ContractError::InvalidRange)
         );
     }
 }

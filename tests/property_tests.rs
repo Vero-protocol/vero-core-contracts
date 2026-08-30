@@ -186,4 +186,79 @@ proptest! {
         assert!(ever_done, "reachable-threshold sequence never resolved");
         assert!(state.is_done);
     }
+
+    /// Any threshold reachable via `set_weight_threshold` (i.e. passing
+    /// `validate_weight_threshold`) is unconditionally accepted by
+    /// `migrate::validate_migration`.
+    #[test]
+    fn prop_reachable_threshold_accepted_by_migration(
+        threshold in 1u64..=vero_core_contracts::limits::MAX_WEIGHT_THRESHOLD,
+    ) {
+        let env = soroban_sdk::Env::default();
+        let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+
+        env.as_contract(&contract_id, || {
+            let mut cache = vero_core_contracts::migrate::MigrationCache::new(&env);
+
+            // Pre-requisite for migration pre-flight: valid storage version
+            cache.set(
+                &vero_core_contracts::DataKey::StorageVersion,
+                &vero_core_contracts::migrate::CURRENT_VERSION,
+            );
+            cache.set(&vero_core_contracts::DataKey::WeightThreshold, &threshold);
+
+            // Threshold validator directly accepts
+            assert_eq!(
+                vero_core_contracts::validation::validate_weight_threshold(threshold),
+                Ok(())
+            );
+
+            // Migration pre-flight check must accept the same threshold
+            assert_eq!(
+                vero_core_contracts::migrate::validate_migration(&env, &cache),
+                Ok(())
+            );
+        });
+    }
+
+    /// Any threshold rejected by `set_weight_threshold` (0 or > MAX_WEIGHT_THRESHOLD)
+    /// is rejected with the exact same error code by `migrate::validate_migration`.
+    #[test]
+    fn prop_invalid_threshold_rejected_identically_by_migration(
+        threshold in proptest::prop_oneof![
+            Just(0u64),
+            (vero_core_contracts::limits::MAX_WEIGHT_THRESHOLD + 1)..=u64::MAX,
+        ]
+    ) {
+        let env = soroban_sdk::Env::default();
+        let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+
+        env.as_contract(&contract_id, || {
+            let mut cache = vero_core_contracts::migrate::MigrationCache::new(&env);
+
+            cache.set(
+                &vero_core_contracts::DataKey::StorageVersion,
+                &vero_core_contracts::migrate::CURRENT_VERSION,
+            );
+            cache.set(&vero_core_contracts::DataKey::WeightThreshold, &threshold);
+
+            let direct_err =
+                vero_core_contracts::validation::validate_weight_threshold(threshold).unwrap_err();
+            let migration_err =
+                vero_core_contracts::migrate::validate_migration(&env, &cache).unwrap_err();
+
+            assert_eq!(direct_err, migration_err);
+            if threshold == 0 {
+                assert_eq!(
+                    direct_err,
+                    vero_core_contracts::ContractError::InvalidAmount
+                );
+            } else {
+                assert_eq!(
+                    direct_err,
+                    vero_core_contracts::ContractError::InvalidRange
+                );
+            }
+        });
+    }
 }

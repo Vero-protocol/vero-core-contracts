@@ -44,6 +44,7 @@ fn generate_signers(env: &Env, n: u32) -> Vec<Address> {
 }
 
 /// Helper to collect all events into a vector of event symbols for assertion.
+#[allow(dead_code)]
 fn event_symbols(env: &Env) -> Vec<soroban_sdk::Symbol> {
     let mut symbols = Vec::new(env);
     for e in env.events().all().iter() {
@@ -400,7 +401,7 @@ fn test_propose_same_hash_adds_approval() {
     // Signer 2 also proposes with same hash — acts as approval
     let signer2 = signers.get(1).unwrap();
     let result = client.try_propose_upgrade(&signer2, &wasm_hash);
-    result.unwrap();
+    let _ = result.unwrap();
 
     // Signer 3 approves via approve_upgrade
     let signer3 = signers.get(2).unwrap();
@@ -548,6 +549,29 @@ fn test_batch_execute_with_upgrade_operations() {
     // Verify state was set
     assert_eq!(client.get_upgrade_threshold(), 2);
     assert_eq!(client.get_upgrade_signers().len(), 2);
+}
+
+#[test]
+fn test_batch_execute_with_set_weight_threshold_validation() {
+    let (env, _contract_id, admin, _token, client) = setup();
+
+    // Valid threshold in batch succeeds
+    let calls = soroban_sdk::vec![
+        &env,
+        vero_core_contracts::BatchCall::SetWeightThreshold(admin.clone(), 500u64),
+    ];
+    let result = client.try_batch_execute(&calls);
+    assert!(result.is_ok());
+    assert_eq!(client.get_weight_threshold(), 500);
+
+    // Invalid threshold (0) in batch reverts
+    let invalid_calls = soroban_sdk::vec![
+        &env,
+        vero_core_contracts::BatchCall::SetWeightThreshold(admin.clone(), 0u64),
+    ];
+    let result = client.try_batch_execute(&invalid_calls);
+    assert!(result.is_err());
+    assert_eq!(client.get_weight_threshold(), 500); // Unchanged
 }
 
 #[test]

@@ -1,3 +1,8 @@
+// The `contracttype` macro generates associated functions that cannot carry
+// doc comments; suppress the lint at file scope so those generated items
+// don't break -D clippy::all.
+#![allow(missing_docs)]
+
 use soroban_sdk::{contracttype, Address};
 
 use crate::types::Role;
@@ -10,7 +15,6 @@ use crate::types::Role;
 ///
 /// Each enum variant namespaces a distinct domain of contract state to guarantee
 /// key uniqueness and prevent collisions across storage reads/writes.
-#[allow(missing_docs)]
 #[contracttype]
 #[derive(Clone, PartialEq, Eq)]
 pub enum DataKey {

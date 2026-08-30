@@ -1,5 +1,8 @@
 #![cfg(any())] // Disabled due to upstream breakages
 
+mod common;
+use common::MockDripsContract;
+
 use soroban_sdk::token::{Client as TokenClient, StellarAssetClient as TestTokenClient};
 use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
@@ -375,17 +378,36 @@ fn test_custom_weight_threshold() {
     assert_eq!(client.get_reputation(&non_guardian), None);
 }
 
-// ─── Reputation gate ────────────────────────────────────────────────
-
 #[test]
-fn test_vote_rejected_without_reputation() {
-    // Guardian with reputation votes once (ok), then again (rejected as duplicate).
-    let (env, _contract_id, admin, token, client) = setup();
-    let g = add_guardian_with_rep(&env, &client, &admin, 100);
+fn test_set_weight_threshold_validation() {
+    let (env, _contract_id, admin, _token, client) = setup();
 
-    assert!(client.try_set_weight_threshold(&admin, &0).is_err());
-    assert!(client.try_set_weight_threshold(&admin, &u64::MAX).is_err());
-    assert!(client.try_set_weight_threshold(&contract_id, &500).is_err());
+    // Zero threshold must be rejected with InvalidAmount and leave threshold unchanged.
+    let initial_threshold = client.get_weight_threshold();
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &0),
+        Err(Ok(ContractError::InvalidAmount))
+    );
+    assert_eq!(client.get_weight_threshold(), initial_threshold);
+
+    // Threshold exceeding MAX_WEIGHT_THRESHOLD must be rejected with InvalidRange.
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &(MAX_WEIGHT_THRESHOLD + 1)),
+        Err(Ok(ContractError::InvalidRange))
+    );
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &u64::MAX),
+        Err(Ok(ContractError::InvalidRange))
+    );
+    assert_eq!(client.get_weight_threshold(), initial_threshold);
+
+    // Valid lower boundary threshold (1) succeeds.
+    client.set_weight_threshold(&admin, &1);
+    assert_eq!(client.get_weight_threshold(), 1);
+
+    // Valid upper boundary threshold (MAX_WEIGHT_THRESHOLD) succeeds.
+    client.set_weight_threshold(&admin, &MAX_WEIGHT_THRESHOLD);
+    assert_eq!(client.get_weight_threshold(), MAX_WEIGHT_THRESHOLD);
 }
 
 #[test]
@@ -1250,13 +1272,6 @@ fn test_simulated_migration_failure_rolls_back() {
     assert_eq!(client.get_storage_version(), 0);
 }
 
-#[contract]
-pub struct MockDripsContract;
-
-#[contractimpl]
-impl MockDripsContract {
-    pub fn start_stream(_env: Env, _contributor: Address, _task_id: u64, _resolution_status: u32) {}
-}
 #[test]
 fn test_purge_done_task_removes_storage() {
     let (env, _contract_id, admin, token, client) = setup();

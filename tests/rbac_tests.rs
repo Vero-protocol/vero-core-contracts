@@ -404,6 +404,30 @@ fn test_config_manager_can_set_weight_threshold() {
 }
 
 #[test]
+fn test_config_manager_cannot_set_invalid_weight_threshold() {
+    use vero_core_contracts::limits::MAX_WEIGHT_THRESHOLD;
+
+    let (env, admin, _token, client) = setup();
+    let manager = Address::generate(&env);
+
+    client.grant_role(&admin, &manager, &Role::ConfigManager);
+
+    // Zero threshold rejected with InvalidAmount
+    assert_eq!(
+        client.try_set_weight_threshold(&manager, &0),
+        Err(Ok(ContractError::InvalidAmount))
+    );
+    assert_eq!(client.get_weight_threshold(), 300);
+
+    // Out of range threshold rejected with InvalidRange
+    assert_eq!(
+        client.try_set_weight_threshold(&manager, &(MAX_WEIGHT_THRESHOLD + 1)),
+        Err(Ok(ContractError::InvalidRange))
+    );
+    assert_eq!(client.get_weight_threshold(), 300);
+}
+
+#[test]
 fn test_non_config_manager_cannot_set_weight_threshold() {
     let (env, _admin, _token, client) = setup();
     let stranger = Address::generate(&env);

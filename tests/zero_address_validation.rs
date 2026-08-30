@@ -133,6 +133,15 @@ fn test_set_fee_bps_rejects_zero_admin() {
     assert!(matches!(result, Err(Ok(ContractError::InvalidAddress))));
 }
 
+#[test]
+fn test_set_weight_threshold_rejects_zero_admin() {
+    let (env, _admin, _token, client) = setup();
+    let zero = zero_address(&env);
+
+    let result = client.try_set_weight_threshold(&zero, &500);
+    assert!(matches!(result, Err(Ok(ContractError::InvalidAddress))));
+}
+
 // ─── Task management ────────────────────────────────────────────────
 
 #[test]

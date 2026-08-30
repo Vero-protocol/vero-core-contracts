@@ -104,3 +104,35 @@ fn test_initialize_rejects_negative_lock_threshold() {
     let result = client.try_initialize(&admin, &token.address(), &-1i128);
     assert!(result.is_err(), "negative lock_threshold must be rejected");
 }
+
+#[test]
+fn test_default_weight_threshold_is_valid_and_setter_enforces_bounds() {
+    use vero_core_contracts::limits::MAX_WEIGHT_THRESHOLD;
+    use vero_core_contracts::{ContractError, Role};
+
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+    let client = VeroContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract_v2(token_admin);
+
+    client.initialize(&admin, &token.address(), &100i128);
+    client.grant_role(&admin, &admin, &Role::ConfigManager);
+
+    // Initial default threshold is 300
+    assert_eq!(client.get_weight_threshold(), 300);
+
+    // Live setter validates bounds post-init
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &0),
+        Err(Ok(ContractError::InvalidAmount))
+    );
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &(MAX_WEIGHT_THRESHOLD + 1)),
+        Err(Ok(ContractError::InvalidRange))
+    );
+    assert_eq!(client.get_weight_threshold(), 300);
+}

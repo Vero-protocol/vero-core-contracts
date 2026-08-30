@@ -14,7 +14,7 @@
 //! * [`entry_circuit_breaker`] — pause & failure reporting
 //! * [`entry_guardians`] — guardians & reputation
 //! * [`entry_tokens`] — token locking & emergency recovery
-//! * [`entry_config`] — fee / treasury / threshold config
+//! * [`entry_config`] — fee / treasury / threshold config (bounded and validated against migration pre-flight)
 //! * [`entry_tasks`] — task registration & voting
 //! * [`entry_rewards`] — reward (drips) streams
 //! * [`entry_upgrades`] — immediate & multi-sig upgrades
@@ -36,7 +36,7 @@ pub mod entry_upgrades;
 
 use crate::events;
 use crate::types::{BatchCall, ContractError, DataKey};
-use crate::validation::validate_external_address as validate_address;
+use crate::validation::{validate_external_address as validate_address, validate_lock_threshold};
 use soroban_sdk::{contract, contractimpl, Address, Env};
 
 /// The main entrypoint for the Vero Core contract.
@@ -56,8 +56,14 @@ impl VeroContract {
         token: Address,
         lock_threshold: i128,
     ) -> Result<(), ContractError> {
+        // Authenticate the account being installed as admin. Without this, an
+        // observer can front-run initialization on a deployed-but-uninitialized
+        // contract and install themselves as Admin.
+        admin.require_auth();
+
         validate_address(&env, &admin)?;
         validate_address(&env, &token)?;
+        validate_lock_threshold(lock_threshold)?;
 
         if env
             .storage()
@@ -116,6 +122,21 @@ impl VeroContract {
         env: Env,
         calls: soroban_sdk::Vec<BatchCall>,
     ) -> Result<(), ContractError> {
+        // Bound the batch by its total estimated instruction cost so a caller
+        // can't submit more work than one transaction can execute. The
+        // `BatchCall::operation()` -> `gas::get_estimated_cost()` mapping is
+        // the single source of truth linking each batchable call to its cost,
+        // so a new `BatchCall` variant can't be dispatched without a
+        // registered gas estimate.
+        let mut estimated_cost: u64 = 0;
+        for call in calls.iter() {
+            estimated_cost =
+                estimated_cost.saturating_add(crate::gas::get_estimated_cost(call.operation()));
+            if estimated_cost > crate::gas::MAX_BATCH_EXECUTE_COST {
+                return Err(ContractError::BatchTooLarge);
+            }
+        }
+
         for call in calls.iter() {
             match call {
                 BatchCall::RegisterTask(admin, task_id, min_votes_required) => {
@@ -146,7 +167,7 @@ impl VeroContract {
                     Self::set_weight_threshold(env.clone(), admin, threshold)?
                 }
                 BatchCall::SetVaultAddress(admin, vault) => {
-                    Self::set_vault_address(env.clone(), admin, vault)
+                    Self::set_vault_address(env.clone(), admin, vault)?
                 }
                 BatchCall::SetUpgradeSigners(admin, signers, threshold) => {
                     Self::set_upgrade_signers(env.clone(), admin, signers, threshold)?
@@ -155,7 +176,7 @@ impl VeroContract {
                     Self::propose_upgrade(env.clone(), signer, hash)?
                 }
                 BatchCall::ApproveUpgrade(signer) => Self::approve_upgrade(env.clone(), signer)?,
-                BatchCall::ExecuteUpgrade(_signer) => Self::execute_upgrade(env.clone())?,
+                BatchCall::ExecuteUpgrade => Self::execute_upgrade(env.clone())?,
                 BatchCall::CancelUpgrade(admin) => Self::cancel_upgrade(env.clone(), admin)?,
                 BatchCall::StartRewardStream(admin, drips, contributor, task_id) => {
                     Self::start_reward_stream(env.clone(), admin, drips, contributor, task_id)?
@@ -163,7 +184,7 @@ impl VeroContract {
                 BatchCall::TogglePause(admin) => Self::toggle_pause(env.clone(), admin)?,
                 BatchCall::Pause(admin) => Self::pause(env.clone(), admin)?,
                 BatchCall::Unpause(admin) => Self::unpause(env.clone(), admin)?,
-                BatchCall::RecordFailure(reporter) => Self::record_failure(env.clone(), reporter)?,
+                BatchCall::RecordFailure => crate::circuit_breaker::record_failure_anonymous(&env)?,
                 BatchCall::ResetCircuitBreaker(admin) => {
                     Self::reset_circuit_breaker(env.clone(), admin)?;
                 }

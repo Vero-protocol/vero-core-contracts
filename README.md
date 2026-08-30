@@ -62,6 +62,13 @@ On-chain GitHub PR verification for the Stellar ecosystem. Guardians — trusted
 
 ---
 
+## Community
+
+Contributors are expected to follow the local [Code of Conduct](CODE_OF_CONDUCT.md)
+when participating in this repository.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -112,6 +119,16 @@ client.grant_role(&admin, &admin, &Role::EmergencyManager);
 
 // Required for start_reward_stream
 client.grant_role(&admin, &admin, &Role::TreasuryManager);
+```
+
+### Configure protocol parameters
+
+```rust
+// Requires Role::ConfigManager. Validates threshold is in 1..=MAX_WEIGHT_THRESHOLD
+client.set_weight_threshold(&admin, &500u64);
+
+// Set fee basis points (up to 1000 bps = 10%)
+client.set_fee_bps(&admin, &25u32);
 ```
 
 ### Add a guardian and set reputation
@@ -374,7 +391,7 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for dev enviro
 
 ## License
 
-Apache-2.0
+[MIT License](LICENSE)
 
 
 

@@ -392,3 +392,37 @@ fn test_zero_address_cannot_report() {
     assert_eq!(err.unwrap(), ContractError::InvalidAddress);
     assert_eq!(client.get_failure_count(), 0);
 }
+
+/// `BatchCall::RecordFailure` is a unit variant — it carries no address payload
+/// and increments the global failure counter via the anonymous batch path.
+#[test]
+fn test_batch_execute_with_record_failure_variant() {
+    let (env, _admin, client) = setup();
+
+    let calls = soroban_sdk::vec![&env, vero_core_contracts::BatchCall::RecordFailure];
+
+    let result = client.try_batch_execute(&calls);
+    assert!(result.is_ok());
+
+    assert_eq!(client.get_failure_count(), 1);
+}
+
+/// When the contract is paused, `set_weight_threshold` is rejected with `ContractPaused`.
+#[test]
+fn test_set_weight_threshold_rejected_while_paused() {
+    let (_env, admin, client) = setup();
+
+    client.grant_role(&admin, &admin, &vero_core_contracts::Role::EmergencyManager);
+    client.grant_role(&admin, &admin, &vero_core_contracts::Role::ConfigManager);
+
+    client.pause(&admin);
+
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &500),
+        Err(Ok(ContractError::ContractPaused))
+    );
+    assert_eq!(
+        client.try_set_weight_threshold(&admin, &0),
+        Err(Ok(ContractError::ContractPaused))
+    );
+}

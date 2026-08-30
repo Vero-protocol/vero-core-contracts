@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formal Verification**: full K-framework formal verification setup for consensus invariants (#108)
 - **Testing**: gas-budget assertions for high-traffic operations, proptest property tests for consensus invariants, task-resolution regression test, and end-to-end happy-path integration test (#181, #187, #259, #188)
 - **Issue Templates**: bug report, feature request, and good-first-issue templates (#253)
+- **Batch Execution Cost Bound**: `batch_execute` rejects batches whose summed estimated instruction cost exceeds `MAX_BATCH_EXECUTE_COST` with `BatchTooLarge` (#214)
 
 ### Changed
 - **Per-Task Vote Storage**: track voters per-task instead of a global vote list to improve scaling (#91)
@@ -38,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Validate each address exactly once per call path (#236)
 - Add `initialize-testnet` to the Makefile header comment (#234)
 - Wire `proofs/build.ps1` as the documented Windows entry point (#237)
+- Reconcile `BatchCall` and `Operation` enums into a single source of truth via `BatchCall::operation()`, add the missing `Operation` variants (`CancelTask`, `RemoveGuardian`, `RequestUnlock`, `SetVaultAddress`, `Pause`, `Unpause`), and give `gas::get_estimated_cost` coverage for every batchable operation; recalibrate gas constants against measured CPU instruction costs (#214)
+- Document the `contracts/` vs. crate-root module boundary in `contracts/mod.rs` and `lib.rs` (#210)
 - Docs: README module registry, DataKey listing, and error-codes table synced with `src/`; duplicate Modules table and emergency-halt procedure removed; missing `grant_role` calls added to Quick Start; rustdoc added to `rbac.rs`, `storage_layout.rs`, and `validation.rs`; API documentation formalized; `DEPLOY.md`, `CONTRIBUTING.md`, and `TODO.md` added; `Description.md` purpose documented for the GrantFox registry; gas-benchmarks reference and reproduction instructions added; changelog release dates replaced with actual merge dates (#115, #173, #174, #177, #178, #183, #186, #189, #190, #251, #252, #254, #255, #258)
 
 ### Deprecated
@@ -53,9 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sanitize administrative inputs and validate input ranges (#94, #97)
 - Fix compile errors and missing `testutils::Address` import after fee changes (#123)
 - Add end-to-end happy-path integration test for #137 (#188)
+- Validate weight threshold in `set_weight_threshold` with identical bounds as `validate_migration` (`1..=MAX_WEIGHT_THRESHOLD`), preventing zero-threshold consensus bypass and storage poisoning (#306)
 
 ### Security
 - CI build/test workflow and dependency security scanning added (#176)
+- Consensus threshold validation in `set_weight_threshold` prevents writing zero threshold that disables weighted voting and poisons future migrations (#306)
 
 ---
 

@@ -10,10 +10,19 @@ use crate::types::{ContractError, DataKey};
 use crate::validation::validate_external_address as validate_address;
 use crate::DEFAULT_WEIGHT_THRESHOLD;
 use crate::{circuit_breaker, events};
-use soroban_sdk::{contractimpl, panic_with_error, Address, Env};
+use soroban_sdk::{contractimpl, Address, Env};
 
 #[contractimpl]
 impl VeroContract {
+    /// Sets the voting weight threshold required for task resolution. Callable
+    /// by the contract admin or a `ConfigManager` while the contract is not paused.
+    ///
+    /// # Errors
+    /// * `InvalidAddress` — the admin address is the zero address or the contract itself.
+    /// * `ContractPaused` — the contract is paused.
+    /// * `NotAuthorized` — the caller does not hold the `ConfigManager` role.
+    /// * `InvalidAmount` — the threshold is 0.
+    /// * `InvalidRange` — the threshold exceeds `MAX_WEIGHT_THRESHOLD`.
     pub fn set_weight_threshold(
         env: Env,
         admin: Address,
@@ -22,6 +31,7 @@ impl VeroContract {
         validate_address(&env, &admin)?;
         circuit_breaker::require_not_paused(&env)?;
         crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::ConfigManager)?;
+        crate::validation::validate_weight_threshold(threshold)?;
         env.storage()
             .instance()
             .set(&DataKey::WeightThreshold, &threshold);
@@ -36,19 +46,25 @@ impl VeroContract {
             .unwrap_or(DEFAULT_WEIGHT_THRESHOLD)
     }
 
-    pub fn set_vault_address(env: Env, admin: Address, vault: Address) {
-        if validate_address(&env, &admin).is_err() {
-            panic_with_error!(env, ContractError::InvalidAddress);
-        }
-        if validate_address(&env, &vault).is_err() {
-            panic_with_error!(env, ContractError::InvalidAddress);
-        }
-        circuit_breaker::require_not_paused(&env).unwrap();
-        // Use try-catch pattern via unwrap since this function has no Result return
-        crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::ConfigManager)
-            .unwrap();
+    /// Sets the vault address. Callable by the contract admin or a
+    /// `ConfigManager` while the contract is not paused.
+    ///
+    /// # Errors
+    /// * `InvalidAddress` — either address is the zero address or the contract itself.
+    /// * `ContractPaused` — the contract is paused.
+    /// * `NotAuthorized` — the caller does not hold the `ConfigManager` role.
+    pub fn set_vault_address(
+        env: Env,
+        admin: Address,
+        vault: Address,
+    ) -> Result<(), ContractError> {
+        validate_address(&env, &admin)?;
+        validate_address(&env, &vault)?;
+        circuit_breaker::require_not_paused(&env)?;
+        crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::ConfigManager)?;
         env.storage().instance().set(&DataKey::VaultAddress, &vault);
         events::emit_vault_set(&env, &admin, &vault);
+        Ok(())
     }
 
     pub fn set_fee_bps(env: Env, admin: Address, bps: u32) -> Result<(), ContractError> {

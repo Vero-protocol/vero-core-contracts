@@ -228,6 +228,27 @@ pub fn record_failure(env: &Env, reporter: Address) -> Result<(), ContractError>
     Ok(())
 }
 
+/// Records an anonymous (reporter-less) failure increment for use by the
+/// batch-dispatch path, where the batch transaction itself is authenticated
+/// but no individual reporter address is carried in the `RecordFailure` unit
+/// variant.  Per-reporter accounting (cooldown, quota, quorum) is skipped;
+/// the global failure counter and the auto-pause check still apply.
+pub fn record_failure_anonymous(env: &Env) -> Result<(), ContractError> {
+    let count = failure_count(env).saturating_add(1);
+    env.storage().instance().set(&DataKey::FailureCount, &count);
+
+    // Quorum check uses the distinct-reporter count from prior attributed
+    // reports; an anonymous increment alone cannot satisfy the quorum.
+    let distinct_reporters = failure_reporters(env).len();
+    if count > FAILURE_THRESHOLD && distinct_reporters >= MIN_DISTINCT_REPORTERS && !is_paused(env)
+    {
+        env.storage().instance().set(&DataKey::Paused, &true);
+        events::emit_circuit_breaker_triggered(env, count);
+    }
+
+    Ok(())
+}
+
 /// Resets the failure counter, clears all per-reporter accounting and unpauses
 /// the contract. Authorization is enforced by the calling entry point;
 /// address validation is not repeated here.

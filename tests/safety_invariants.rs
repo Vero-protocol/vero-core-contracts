@@ -263,3 +263,34 @@ fn invariant_max_weight_single_guardian() {
     assert!(state.is_done);
     assert_eq!(state.total_weight_accrued, u64::MAX);
 }
+
+// ─── I11: Weight Threshold Setter Invariants ──────────────────────────────────
+
+#[test]
+fn invariant_weight_threshold_validation_rejects_zero_and_overflow() {
+    use vero_core_contracts::limits::MAX_WEIGHT_THRESHOLD;
+    use vero_core_contracts::validation::validate_weight_threshold;
+    use vero_core_contracts::ContractError;
+
+    // Zero threshold would make total_weight_accrued >= threshold trivially true on the first vote,
+    // defeating consensus. It must be strictly rejected with InvalidAmount.
+    assert_eq!(
+        validate_weight_threshold(0),
+        Err(ContractError::InvalidAmount)
+    );
+
+    // Thresholds above MAX_WEIGHT_THRESHOLD are rejected with InvalidRange.
+    assert_eq!(
+        validate_weight_threshold(MAX_WEIGHT_THRESHOLD + 1),
+        Err(ContractError::InvalidRange)
+    );
+    assert_eq!(
+        validate_weight_threshold(u64::MAX),
+        Err(ContractError::InvalidRange)
+    );
+
+    // All boundary values in valid range are accepted.
+    assert_eq!(validate_weight_threshold(1), Ok(()));
+    assert_eq!(validate_weight_threshold(300), Ok(()));
+    assert_eq!(validate_weight_threshold(MAX_WEIGHT_THRESHOLD), Ok(()));
+}

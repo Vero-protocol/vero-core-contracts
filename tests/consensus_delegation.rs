@@ -16,7 +16,7 @@ fn setup() -> (Env, Address, Address, Address, VeroContractClient<'static>) {
     let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
     let client = VeroContractClient::new(&env, &contract_id);
 
-    client.initialize(&admin, &token, &0);
+    client.initialize(&admin, &token, &1);
     client.grant_role(&admin, &admin, &Role::GuardianManager);
     client.grant_role(&admin, &admin, &Role::TaskManager);
 
@@ -27,8 +27,8 @@ fn add_voter(env: &Env, client: &VeroContractClient, admin: &Address, token: &Ad
     let guardian = Address::generate(env);
     client.add_guardian(admin, &guardian);
     client.set_reputation(admin, &guardian, &100);
-    TestTokenClient::new(env, token).mint(&guardian, &1);
-    client.lock_tokens(&guardian, &1);
+    TestTokenClient::new(env, token).mint(&guardian, &2);
+    client.lock_tokens(&guardian, &2);
     guardian
 }
 
@@ -71,4 +71,24 @@ fn vote_uses_verified_consensus_boundaries() {
 
     client.vote(&guardian, &3);
     assert!(client.get_task(&3).unwrap().is_done);
+}
+
+#[test]
+fn test_vote_respects_dynamically_configured_weight_threshold() {
+    let (env, _contract_id, admin, token, client) = setup();
+    client.grant_role(&admin, &admin, &Role::ConfigManager);
+
+    // Update threshold from default 300 to 200
+    client.set_weight_threshold(&admin, &200);
+    assert_eq!(client.get_weight_threshold(), 200);
+
+    let guardian = add_voter(&env, &client, &admin, &token);
+    client.set_reputation(&admin, &guardian, &200);
+
+    client.register_task(&admin, &10, &1);
+    client.vote(&guardian, &10);
+
+    let task = client.get_task(&10).unwrap();
+    assert!(task.is_done);
+    assert_eq!(task.total_weight_accrued, 200);
 }

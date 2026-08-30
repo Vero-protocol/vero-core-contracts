@@ -217,3 +217,9 @@ The `CONSENSUS_THRESHOLD` invariant is formally proved:
 > **No execution path in `apply_vote` can set `is_done = true` unless `total_weight_accrued >= threshold`.**
 
 This proof, combined with the exhaustive unit test suite, provides high assurance that the weighted guardian consensus mechanism is correct and cannot be manipulated to resolve tasks below the configured threshold.
+
+### Issue #306: Weight Threshold Setter Validation
+In addition to consensus invariant proofs, property-based tests in `tests/property_tests.rs` prove that:
+- `set_weight_threshold` and `migrate::validate_migration` enforce 100% equivalent acceptance bounds (`1..=MAX_WEIGHT_THRESHOLD`).
+- Invalid inputs (`0` and `> MAX_WEIGHT_THRESHOLD`) are rejected identically with `InvalidAmount` and `InvalidRange`.
+

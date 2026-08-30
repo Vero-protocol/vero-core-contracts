@@ -32,12 +32,12 @@
 //! | `proof_multi_vote_accumulation` | weight accumulates correctly across N symbolic votes |
 //! | `proof_resolution_invariant_helper` | `resolution_invariant_holds()` is a sound post-condition |
 
-#![cfg_attr(kani, allow(unused))]
+#![cfg_attr(not(kani), allow(unused))]
 
-// Re-export the types we need from the main crate's pure consensus module.
-use vero_core_contracts::consensus::{
-    apply_vote, resolution_invariant_holds, ConsensusError, ConsensusState,
-};
+// Import directly from the standalone consensus crate (AC-1: no soroban-sdk).
+// All use sites are inside `#[cfg(kani)]` harnesses; the `cfg_attr` above
+// suppresses the unused-import warning when building outside Kani.
+use vero_consensus::{apply_vote, resolution_invariant_holds, ConsensusError, ConsensusState};
 
 // ─── Harness 1 ────────────────────────────────────────────────────────────────
 /// **Threshold Invariant**
@@ -365,8 +365,5 @@ fn proof_resolution_invariant_helper() {
     }
 }
 
-// ─── Non-Kani fallback ────────────────────────────────────────────────────────
 // When compiled normally (not via `cargo kani`), this crate exposes no
-// symbols — it exists purely for Kani's symbolic execution.
-#[cfg(not(kani))]
-fn main() {}
+// public symbols — it exists purely for Kani's symbolic execution.

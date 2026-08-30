@@ -55,11 +55,16 @@ pub fn add_guardian(env: &Env, _admin: Address, guardian: Address) -> Result<(),
     Ok(())
 }
 
-/// Removes an existing guardian from the contract.
+/// Internal helper that deregisters a guardian from all membership structures.
 ///
-/// Address validation (`admin`, `guardian`) is performed by the calling
-/// entrypoint; this helper must not repeat it.
-pub fn remove_guardian(env: &Env, _admin: Address, guardian: Address) -> Result<(), ContractError> {
+/// This removes the guardian from:
+/// - The Guardian flag (DataKey::Guardian)
+/// - The AllGuardians set
+/// - The dense slot index (GuardianIndexAt/GuardianIndexOf/GuardianIndexCount)
+///
+/// Caller is responsible for any validation (e.g., NotGuardian check) and
+/// peripheral cleanup (e.g., token refunds, timelock clearing).
+pub(crate) fn deregister_guardian(env: &Env, guardian: Address) -> Result<(), ContractError> {
     let key = DataKey::Guardian(guardian.clone());
     if !env.storage().instance().has(&key) {
         return Err(ContractError::NotGuardian);
@@ -130,6 +135,14 @@ pub fn remove_guardian(env: &Env, _admin: Address, guardian: Address) -> Result<
     }
 
     Ok(())
+}
+
+/// Removes an existing guardian from the contract.
+///
+/// Address validation (`admin`, `guardian`) is performed by the calling
+/// entrypoint; this helper must not repeat it.
+pub fn remove_guardian(env: &Env, _admin: Address, guardian: Address) -> Result<(), ContractError> {
+    deregister_guardian(env, guardian)
 }
 
 /// Checks if a given address is a registered guardian.

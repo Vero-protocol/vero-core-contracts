@@ -1,5 +1,8 @@
 #![cfg(any())] // Disabled due to upstream breakages
 
+mod common;
+use common::MockDripsContract;
+
 use soroban_sdk::token::{Client as TokenClient, StellarAssetClient as TestTokenClient};
 use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
@@ -1269,13 +1272,6 @@ fn test_simulated_migration_failure_rolls_back() {
     assert_eq!(client.get_storage_version(), 0);
 }
 
-#[contract]
-pub struct MockDripsContract;
-
-#[contractimpl]
-impl MockDripsContract {
-    pub fn start_stream(_env: Env, _contributor: Address, _task_id: u64, _resolution_status: u32) {}
-}
 #[test]
 fn test_purge_done_task_removes_storage() {
     let (env, _contract_id, admin, token, client) = setup();

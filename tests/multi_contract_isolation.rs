@@ -66,8 +66,8 @@ fn test_guardian_state_does_not_leak_between_instances() {
     let token = env.register_stellar_asset_contract_v2(token_admin);
     let token_addr = token.address();
 
-    let client_a = deploy_instance(&env, &admin_a, &token_addr, 0);
-    let client_b = deploy_instance(&env, &admin_b, &token_addr, 0);
+    let client_a = deploy_instance(&env, &admin_a, &token_addr, 1);
+    let client_b = deploy_instance(&env, &admin_b, &token_addr, 1);
 
     // ── Populate contract A ──────────────────────────────────────────────────
     let guardian_a = Address::generate(&env);
@@ -121,8 +121,8 @@ fn test_state_registered_in_b_does_not_appear_in_a() {
     let token = env.register_stellar_asset_contract_v2(token_admin);
     let token_addr = token.address();
 
-    let client_a = deploy_instance(&env, &admin_a, &token_addr, 0);
-    let client_b = deploy_instance(&env, &admin_b, &token_addr, 0);
+    let client_a = deploy_instance(&env, &admin_a, &token_addr, 1);
+    let client_b = deploy_instance(&env, &admin_b, &token_addr, 1);
 
     // ── Populate contract B ──────────────────────────────────────────────────
     let guardian_b = Address::generate(&env);
@@ -167,8 +167,8 @@ fn test_admin_state_is_isolated_per_instance() {
     let token = env.register_stellar_asset_contract_v2(token_admin);
     let token_addr = token.address();
 
-    let client_a = deploy_instance(&env, &admin_a, &token_addr, 0);
-    let client_b = deploy_instance(&env, &admin_b, &token_addr, 0);
+    let client_a = deploy_instance(&env, &admin_a, &token_addr, 1);
+    let client_b = deploy_instance(&env, &admin_b, &token_addr, 1);
 
     // Each instance stores its own admin.
     assert_eq!(
@@ -204,8 +204,8 @@ fn test_overlapping_task_ids_are_isolated_per_instance() {
     let token = env.register_stellar_asset_contract_v2(token_admin);
     let token_addr = token.address();
 
-    let client_a = deploy_instance(&env, &admin_a, &token_addr, 0);
-    let client_b = deploy_instance(&env, &admin_b, &token_addr, 0);
+    let client_a = deploy_instance(&env, &admin_a, &token_addr, 1);
+    let client_b = deploy_instance(&env, &admin_b, &token_addr, 1);
 
     // Both instances register the SAME task id (100) independently.
     let shared_task_id: u64 = 100;
@@ -258,8 +258,8 @@ fn test_pause_state_is_isolated_per_instance() {
     let token = env.register_stellar_asset_contract_v2(token_admin);
     let token_addr = token.address();
 
-    let client_a = deploy_instance(&env, &admin_a, &token_addr, 0);
-    let client_b = deploy_instance(&env, &admin_b, &token_addr, 0);
+    let client_a = deploy_instance(&env, &admin_a, &token_addr, 1);
+    let client_b = deploy_instance(&env, &admin_b, &token_addr, 1);
 
     // Grant EmergencyManager role so admin_a can pause instance A.
     client_a.grant_role(&admin_a, &admin_a, &Role::EmergencyManager);

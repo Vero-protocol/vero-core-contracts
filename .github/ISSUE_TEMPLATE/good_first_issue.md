@@ -22,3 +22,10 @@ Explicitly what's in/out of scope, so PRs don't sprawl.
 
 ## Definition of done
 The single, concrete, verifiable condition that means this issue is finished.
+
+---
+
+**If you pick this issue up:** the pull request that closes it needs a **detailed
+description** — what was wrong, the approach you took, anything the reviewer
+should look at closely, and how you verified it. A one-line description will be
+sent back before review. See CONTRIBUTING.md.

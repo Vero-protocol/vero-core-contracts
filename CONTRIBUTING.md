@@ -187,3 +187,27 @@ Please report unacceptable behaviour by opening an issue in this repository.
 ---
 
 Apache-2.0 — contributions welcome.
+
+## Writing the pull request description
+
+**Every pull request needs a detailed description.** A one-line summary, a
+restatement of the issue title, or "fixes the issue" is not enough, and a PR
+that arrives with one will be sent back before review.
+
+Write it for a reviewer who has *not* read the issue. Cover:
+
+- **What was wrong** — the problem or gap, and the behaviour before your change.
+- **What you did** — the approach you took, and any alternative you considered
+  and rejected, with the reason.
+- **What to look at** — anything subtle, risky, or that you are unsure about.
+  Flagging your own uncertainty speeds review up; it does not count against you.
+- **How you verified it** — tests you added, commands you ran, manual checks.
+
+Two things this is not: it is not a diff summary — the diff already says which
+lines changed, and the description should say *why*. And it is not a place to
+hide problems. If something is incomplete or a known limitation remains, say so
+explicitly.
+
+Keep the `Closes #<issue-number>` reference in the description itself. GitHub
+ignores closing keywords written in PR comments, so a link posted as a comment
+will not close the issue on merge.

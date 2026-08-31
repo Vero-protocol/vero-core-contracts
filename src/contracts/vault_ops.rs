@@ -131,8 +131,9 @@ pub(crate) fn resign_guardian(env: &Env, guardian: Address) -> Result<(), Contra
     // Check if timelock has expired
     timelock::check_timelock_expired(env, &guardian)?;
 
-    let g_key = DataKey::Guardian(guardian.clone());
-    env.storage().instance().remove(&g_key);
+    // Deregister guardian from all membership structures (AllGuardians, slot index)
+    guardian::deregister_guardian(env, guardian.clone())?;
+
     let key = DataKey::LockedBalance(guardian.clone());
     let amount: i128 = env.storage().instance().get(&key).unwrap_or(0);
     if amount > 0 {

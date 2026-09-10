@@ -172,7 +172,7 @@ pub enum BatchCall {
     TogglePause(Address),
     Pause(Address),
     Unpause(Address),
-    RecordFailure,
+    RecordFailure(Address),
     ResetCircuitBreaker(Address),
     EmergencyRecover(Address, Address, i128),
     /// Set multi-sig upgrade signers and threshold.
@@ -215,7 +215,7 @@ impl BatchCall {
             BatchCall::TogglePause(..) => Operation::TogglePause,
             BatchCall::Pause(..) => Operation::Pause,
             BatchCall::Unpause(..) => Operation::Unpause,
-            BatchCall::RecordFailure => Operation::RecordFailure,
+            BatchCall::RecordFailure(..) => Operation::RecordFailure,
             BatchCall::ResetCircuitBreaker(..) => Operation::ResetCircuitBreaker,
             BatchCall::EmergencyRecover(..) => Operation::EmergencyRecover,
             BatchCall::SetUpgradeSigners(..) => Operation::SetUpgradeSigners,

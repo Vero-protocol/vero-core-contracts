@@ -393,18 +393,54 @@ fn test_zero_address_cannot_report() {
     assert_eq!(client.get_failure_count(), 0);
 }
 
-/// `BatchCall::RecordFailure` is a unit variant — it carries no address payload
-/// and increments the global failure counter via the anonymous batch path.
+/// `BatchCall::RecordFailure` carries an attributable reporter address payload
+/// and increments the global failure counter via the authenticated path.
 #[test]
 fn test_batch_execute_with_record_failure_variant() {
     let (env, _admin, client) = setup();
+    let reporter = Address::generate(&env);
 
-    let calls = soroban_sdk::vec![&env, vero_core_contracts::BatchCall::RecordFailure];
+    let calls = soroban_sdk::vec![
+        &env,
+        vero_core_contracts::BatchCall::RecordFailure(reporter.clone())
+    ];
 
+    env.mock_all_auths();
     let result = client.try_batch_execute(&calls);
     assert!(result.is_ok());
 
     assert_eq!(client.get_failure_count(), 1);
+}
+
+/// The invariant MAX_REPORTS_PER_REPORTER * (MIN_DISTINCT_REPORTERS - 1) <= FAILURE_THRESHOLD
+/// must strictly hold so that fewer than MIN_DISTINCT_REPORTERS cannot trip the circuit breaker.
+#[test]
+fn test_sybil_barrier_arithmetic_invariant() {
+    use vero_core_contracts::circuit_breaker::{
+        FAILURE_THRESHOLD, MAX_REPORTS_PER_REPORTER, MIN_DISTINCT_REPORTERS,
+    };
+    assert!(
+        MAX_REPORTS_PER_REPORTER * (MIN_DISTINCT_REPORTERS - 1) <= FAILURE_THRESHOLD,
+        "Invariant violated: sub-quorum coalition must not be able to reach FAILURE_THRESHOLD"
+    );
+}
+
+/// An unauthenticated caller on the batch path cannot increment FailureCount.
+#[test]
+fn test_batch_execute_record_failure_requires_auth() {
+    let (env, _admin, client) = setup();
+    let reporter = Address::generate(&env);
+
+    let calls = soroban_sdk::vec![
+        &env,
+        vero_core_contracts::BatchCall::RecordFailure(reporter.clone())
+    ];
+
+    // Without mocked auth the call must fail the signature check
+    env.set_auths(&[]);
+    let result = client.try_batch_execute(&calls);
+    assert!(result.is_err());
+    assert_eq!(client.get_failure_count(), 0);
 }
 
 /// When the contract is paused, `set_weight_threshold` is rejected with `ContractPaused`.

@@ -87,4 +87,18 @@ impl VeroContract {
     pub fn get_archived_task(env: Env, task_id: u64) -> Option<crate::types::Task> {
         storage::get_archived_task(&env, task_id)
     }
+
+    /// Retries funds release for a resolved task whose initial vault release failed.
+    ///
+    /// Callable permissionlessly or by admin. Reverts with `NoPendingRelease` if the
+    /// task does not have an outstanding failed release. Reverts with `EscrowUnavailable`
+    /// if the vault call fails again or no vault address is configured.
+    pub fn retry_vault_release(env: Env, task_id: u64) -> Result<(), ContractError> {
+        logic::retry_vault_release(&env, task_id)
+    }
+
+    /// Returns a list of task IDs that currently have outstanding pending vault releases.
+    pub fn get_pending_releases(env: Env) -> Vec<u64> {
+        storage::get_pending_releases(&env)
+    }
 }

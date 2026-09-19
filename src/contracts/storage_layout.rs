@@ -156,4 +156,10 @@ pub enum DataKey {
     /// Number of occupied task index slots.
     /// Singleton key tracking total count of indexed tasks in dense slot storage.
     TaskIndexCount,
+    /// Indicates an active task whose vault release failed and is pending retry.
+    /// Namespaces pending release status (`DataKey::PendingRelease(task_id)`).
+    PendingRelease(u64),
+    /// Vector of task IDs that currently have outstanding pending vault releases.
+    /// Singleton key holding vector of pending release task IDs.
+    AllPendingReleases,
 }

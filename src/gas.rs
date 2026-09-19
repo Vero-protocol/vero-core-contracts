@@ -171,6 +171,9 @@ pub const COST_SET_FEE_BPS: u64 = 650_000;
 /// `set_treasury_address`: base + address validation + paused read + role read + treasury write.
 pub const COST_SET_TREASURY_ADDRESS: u64 = 650_000;
 
+/// `retry_vault_release`: base + paused read + pending_release read + vault_address read + reentrancy lock/unlock + cross-contract try_release_funds + remove pending_release + update AllPendingReleases + event.
+pub const COST_RETRY_VAULT_RELEASE: u64 = 3_000_000;
+
 // ─── Public mapping function ───────────────────────────────────────────────────
 
 /// Returns the estimated instruction-unit cost for a given [`Operation`].
@@ -218,6 +221,7 @@ pub fn get_estimated_cost(op: Operation) -> u64 {
         Operation::EmergencyRecover => COST_EMERGENCY_RECOVER,
         Operation::SetFeeBps => COST_SET_FEE_BPS,
         Operation::SetTreasuryAddress => COST_SET_TREASURY_ADDRESS,
+        Operation::RetryVaultRelease => COST_RETRY_VAULT_RELEASE,
     }
 }
 
@@ -259,6 +263,7 @@ mod tests {
             Operation::EmergencyRecover,
             Operation::SetFeeBps,
             Operation::SetTreasuryAddress,
+            Operation::RetryVaultRelease,
         ];
 
         for op in ops {

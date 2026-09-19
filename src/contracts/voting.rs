@@ -17,8 +17,9 @@ pub trait Vault {
 }
 
 /// Attempts to release funds from the vault.  If the vault call fails the
-/// failure is logged via an event but does not revert the transaction; task
-/// resolution must never be blocked by a broken vault.
+/// failure is logged via an event and recorded in storage as a pending release,
+/// but does not revert the transaction; task resolution must never be blocked
+/// by a broken vault.
 pub(crate) fn try_release_vault_funds(env: &Env, task_id: u64, vault_addr: &Address) {
     let vault_client = VaultClient::new(env, vault_addr);
     let result = vault_client.try_release_funds(&task_id);
@@ -28,7 +29,49 @@ pub(crate) fn try_release_vault_funds(env: &Env, task_id: u64, vault_addr: &Addr
             events::emit_vault_release_success(env, task_id);
         }
         Err(_e) => {
+            storage::set_pending_release(env, task_id);
             events::emit_vault_release_failed(env, task_id);
+        }
+    }
+}
+
+/// Retries vault release for a task that previously failed fund release.
+///
+/// Callable permissionlessly. Requires that the contract is not paused,
+/// task_id is valid, and the task has a recorded pending release.
+/// If the vault call succeeds, the pending release record is cleared and a success event is emitted.
+/// If the vault call fails, a failure event is emitted and `EscrowUnavailable` is returned,
+/// keeping the pending release intact for subsequent retries.
+pub(crate) fn retry_vault_release(env: &Env, task_id: u64) -> Result<(), ContractError> {
+    circuit_breaker::require_not_paused(env)?;
+    crate::validation::validate_task_id(task_id)?;
+
+    if !storage::has_pending_release(env, task_id) {
+        return Err(ContractError::NoPendingRelease);
+    }
+
+    let vault_addr: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::VaultAddress)
+        .ok_or(ContractError::EscrowUnavailable)?;
+
+    reentrancy::lock(env)?;
+
+    let vault_client = VaultClient::new(env, &vault_addr);
+    let result = vault_client.try_release_funds(&task_id);
+
+    match result {
+        Ok(_) => {
+            storage::remove_pending_release(env, task_id);
+            events::emit_vault_release_success(env, task_id);
+            reentrancy::unlock(env);
+            Ok(())
+        }
+        Err(_e) => {
+            events::emit_vault_release_failed(env, task_id);
+            reentrancy::unlock(env);
+            Err(ContractError::EscrowUnavailable)
         }
     }
 }

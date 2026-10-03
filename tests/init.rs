@@ -1,7 +1,7 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
-use vero_core_contracts::VeroContractClient;
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+use vero_core_contracts::{Role, VeroContractClient};
 
 #[test]
 fn test_registry_starts_clean() {
@@ -135,4 +135,40 @@ fn test_default_weight_threshold_is_valid_and_setter_enforces_bounds() {
         Err(Ok(ContractError::InvalidRange))
     );
     assert_eq!(client.get_weight_threshold(), 300);
+}
+
+#[test]
+fn test_get_ledger_sequence() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, vero_core_contracts::VeroContract);
+    let client = VeroContractClient::new(&env, &contract_id);
+
+    // Initial sequence matches the default environment sequence
+    assert_eq!(client.get_ledger(), env.ledger().sequence());
+
+    // Sequence advances when mocked in the environment
+    env.ledger().set_sequence_number(100);
+    assert_eq!(client.get_ledger(), 100);
+
+    env.ledger().set_sequence_number(500);
+    assert_eq!(client.get_ledger(), 500);
+
+    // Sequence remains readable after initialization and across ledger advances
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract_v2(token_admin);
+    client.initialize(&admin, &token.address(), &100i128);
+
+    env.ledger().set_sequence_number(1_000);
+    assert_eq!(client.get_ledger(), 1_000);
+
+    env.ledger().set_sequence_number(10_000);
+    assert_eq!(client.get_ledger(), 10_000);
+
+    // Sequence remains readable even when the contract is paused
+    client.grant_role(&admin, &admin, &Role::EmergencyManager);
+    client.pause(&admin);
+    env.ledger().set_sequence_number(25_000);
+    assert_eq!(client.get_ledger(), 25_000);
 }

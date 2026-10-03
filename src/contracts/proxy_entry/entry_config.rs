@@ -46,6 +46,11 @@ impl VeroContract {
             .unwrap_or(DEFAULT_WEIGHT_THRESHOLD)
     }
 
+    /// Returns the current ledger sequence number.
+    pub fn get_ledger(env: Env) -> u32 {
+        env.ledger().sequence()
+    }
+
     /// Sets the vault address. Callable by the contract admin or a
     /// `ConfigManager` while the contract is not paused.
     ///

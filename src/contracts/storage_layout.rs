@@ -87,6 +87,9 @@ pub enum DataKey {
     /// Vector/list of all task IDs.
     /// Singleton key holding chronological vector of all created task IDs.
     AllTasks,
+    /// Counter tracking the highest assigned task ID to ensure monotonic sequential IDs.
+    /// Singleton key storing the current task sequence counter (u64).
+    TaskCounter,
     /// Vector/list of all recorded votes.
     /// Singleton key holding global sequence of vote records.
     AllVotes,

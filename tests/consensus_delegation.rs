@@ -85,10 +85,10 @@ fn test_vote_respects_dynamically_configured_weight_threshold() {
     let guardian = add_voter(&env, &client, &admin, &token);
     client.set_reputation(&admin, &guardian, &200);
 
-    client.register_task(&admin, &10, &1);
-    client.vote(&guardian, &10);
+    client.register_task(&admin, &1, &1);
+    client.vote(&guardian, &1);
 
-    let task = client.get_task(&10).unwrap();
+    let task = client.get_task(&1).unwrap();
     assert!(task.is_done);
     assert_eq!(task.total_weight_accrued, 200);
 }

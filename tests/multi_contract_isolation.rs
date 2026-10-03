@@ -129,7 +129,7 @@ fn test_state_registered_in_b_does_not_appear_in_a() {
     client_b.add_guardian(&admin_b, &guardian_b);
     client_b.set_reputation(&admin_b, &guardian_b, &999u64);
 
-    let task_id_b: u64 = 42;
+    let task_id_b: u64 = 1;
     client_b.register_task(&admin_b, &task_id_b, &1u32);
 
     // ── Contract B — sanity-check ────────────────────────────────────────────
@@ -149,7 +149,7 @@ fn test_state_registered_in_b_does_not_appear_in_a() {
     );
     assert!(
         client_a.get_task(&task_id_b).is_none(),
-        "A: task 42 must NOT exist in instance A (storage leak!)"
+        "A: task 1 must NOT exist in instance A (storage leak!)"
     );
 }
 
@@ -207,8 +207,8 @@ fn test_overlapping_task_ids_are_isolated_per_instance() {
     let client_a = deploy_instance(&env, &admin_a, &token_addr, 1);
     let client_b = deploy_instance(&env, &admin_b, &token_addr, 1);
 
-    // Both instances register the SAME task id (100) independently.
-    let shared_task_id: u64 = 100;
+    // Both instances register the SAME task id (1) independently.
+    let shared_task_id: u64 = 1;
     client_a.register_task(&admin_a, &shared_task_id, &1u32);
     client_b.register_task(&admin_b, &shared_task_id, &2u32);
 

@@ -59,7 +59,7 @@ fn test_end_to_end_happy_path() {
     client.lock_tokens(&guardian, &105i128);
 
     // 4. Register a task
-    let task_id = 42u64;
+    let task_id = 1u64;
     client.register_task(&admin, &task_id, &1u32);
 
     let task = client.get_task(&task_id).unwrap();

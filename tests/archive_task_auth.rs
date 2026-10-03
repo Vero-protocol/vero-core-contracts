@@ -54,18 +54,18 @@ fn test_taskmanager_can_archive_task() {
     client.add_guardian(&admin, &guardian);
     client.set_reputation(&admin, &guardian, &100u64);
     client.set_weight_threshold(&admin, &1u64);
-    client.register_task(&admin, &2u64, &1u32);
+    client.register_task(&admin, &1u64, &1u32);
 
     let sac = soroban_sdk::token::StellarAssetClient::new(&env, &token);
     sac.mint(&guardian, &101i128);
     client.lock_tokens(&guardian, &101i128);
 
     env.ledger().set_timestamp(1_000);
-    client.vote(&guardian, &2u64);
+    client.vote(&guardian, &1u64);
     env.ledger()
         .set_timestamp(1_000 + ARCHIVE_AFTER_SECONDS + 1);
 
-    client.archive_task(&admin, &2u64);
-    assert!(client.get_task(&2u64).is_none());
-    assert!(client.get_archived_task(&2u64).is_some());
+    client.archive_task(&admin, &1u64);
+    assert!(client.get_task(&1u64).is_none());
+    assert!(client.get_archived_task(&1u64).is_some());
 }

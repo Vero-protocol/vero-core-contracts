@@ -87,4 +87,11 @@ impl VeroContract {
     pub fn get_archived_task(env: Env, task_id: u64) -> Option<crate::types::Task> {
         storage::get_archived_task(&env, task_id)
     }
+
+    /// Returns the current monotonic task counter.
+    ///
+    /// Tasks must be registered with IDs incrementing strictly by 1.
+    pub fn get_task_counter(env: Env) -> u64 {
+        task::get_task_counter(&env)
+    }
 }

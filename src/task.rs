@@ -29,9 +29,16 @@ pub fn register_tasks(
         return Err(ContractError::BatchTooLarge);
     }
 
+    let mut current_counter = get_task_counter(env);
     let mut seen_task_ids = Vec::new(env);
     for task_id in task_ids.iter() {
         validation::validate_task_id(task_id)?;
+        let expected_id = current_counter
+            .checked_add(1)
+            .ok_or(ContractError::InvalidConfig)?;
+        if task_id != expected_id {
+            return Err(ContractError::InvalidConfig);
+        }
         if seen_task_ids.contains(task_id) {
             return Err(ContractError::InvalidConfig);
         }
@@ -41,6 +48,7 @@ pub fn register_tasks(
             return Err(ContractError::InvalidConfig);
         }
         seen_task_ids.push_back(task_id);
+        current_counter = expected_id;
     }
 
     reentrancy::lock(env)?;
@@ -92,6 +100,9 @@ pub fn register_tasks(
     }
 
     env.storage().instance().set(&DataKey::AllTasks, &all_tasks);
+    env.storage()
+        .instance()
+        .set(&DataKey::TaskCounter, &current_counter);
 
     reentrancy::unlock(env);
     Ok(())
@@ -129,6 +140,14 @@ pub fn get_all_tasks(env: &Env) -> Vec<u64> {
         .instance()
         .get(&DataKey::AllTasks)
         .unwrap_or(Vec::new(env))
+}
+
+/// Retrieves the current monotonic task counter.
+pub fn get_task_counter(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::TaskCounter)
+        .unwrap_or(0)
 }
 
 /// Purge a terminal task (done or cancelled) from contract storage.
@@ -219,4 +238,66 @@ pub fn purge_task(env: &Env, _admin: Address, task_id: u64) -> Result<(), Contra
     events::emit_task_purged(env, task_id);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::vec;
+
+    #[test]
+    fn test_register_tasks_batch_monotonic() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+
+        let contract_id = env.register_contract(None, crate::VeroContract);
+        env.as_contract(&contract_id, || {
+            // Counter starts at 0
+            assert_eq!(get_task_counter(&env), 0);
+
+            // Register batch [1, 2, 3]
+            let batch1 = vec![&env, 1u64, 2u64, 3u64];
+            assert!(register_tasks(&env, admin.clone(), batch1, 1).is_ok());
+            assert_eq!(get_task_counter(&env), 3);
+            assert!(get_task(&env, 1).is_some());
+            assert!(get_task(&env, 2).is_some());
+            assert!(get_task(&env, 3).is_some());
+
+            // Register batch [4, 5]
+            let batch2 = vec![&env, 4u64, 5u64];
+            assert!(register_tasks(&env, admin.clone(), batch2, 1).is_ok());
+            assert_eq!(get_task_counter(&env), 5);
+
+            // Internal gap [6, 8] rejected
+            let bad_gap = vec![&env, 6u64, 8u64];
+            assert_eq!(
+                register_tasks(&env, admin.clone(), bad_gap, 1),
+                Err(ContractError::InvalidConfig)
+            );
+            assert_eq!(get_task_counter(&env), 5);
+
+            // Out-of-order [7, 6] rejected
+            let bad_order = vec![&env, 7u64, 6u64];
+            assert_eq!(
+                register_tasks(&env, admin.clone(), bad_order, 1),
+                Err(ContractError::InvalidConfig)
+            );
+            assert_eq!(get_task_counter(&env), 5);
+
+            // Duplicate in batch [6, 6] rejected
+            let bad_dup = vec![&env, 6u64, 6u64];
+            assert_eq!(
+                register_tasks(&env, admin.clone(), bad_dup, 1),
+                Err(ContractError::InvalidConfig)
+            );
+            assert_eq!(get_task_counter(&env), 5);
+
+            // Correct next batch [6, 7]
+            let batch3 = vec![&env, 6u64, 7u64];
+            assert!(register_tasks(&env, admin.clone(), batch3, 1).is_ok());
+            assert_eq!(get_task_counter(&env), 7);
+        });
+    }
 }

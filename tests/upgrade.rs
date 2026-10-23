@@ -135,6 +135,81 @@ fn test_propose_upgrade_approves_first_signer() {
     assert!(result.is_ok());
 }
 
+// Approvals are a set of authorized signers, not a sorted sequence. The
+// configured signer list remains strictly sorted to prevent duplicates.
+#[test]
+fn test_upgrade_accepts_higher_signer_proposal_followed_by_lower_approval() {
+    let (env, _contract_id, admin, _token, client) = setup();
+    let signers = generate_signers(&env, 3);
+    let wasm_hash = BytesN::from_array(&env, &[21u8; 32]);
+    client.set_upgrade_signers(&admin, &signers, &2u32);
+
+    let lower = signers.get(0).unwrap();
+    let higher = signers.get(1).unwrap();
+    client.propose_upgrade(&higher, &wasm_hash);
+    // Before this fix, the second authorized signer was rejected solely
+    // because lower sorts before higher.
+    client.approve_upgrade(&lower);
+    assert_eq!(
+        client.try_approve_upgrade(&lower),
+        Err(Ok(ContractError::AlreadyApproved)),
+        "repeated approvals must still fail"
+    );
+    // Invalid fixture WASM: this should reach the deployer, rather than fail
+    // the upgrade contract's threshold check.
+    let execution = client.try_execute_upgrade();
+    assert!(
+        matches!(execution, Err(Err(_))),
+        "approved quorum must reach the deployer, not return a contract error: {execution:?}"
+    );
+}
+
+#[test]
+fn test_three_upgrade_signers_can_approve_in_any_order() {
+    // All 3! permutations, with a quorum requiring every signer. The first
+    // signer proposes; the second and third approve (alternating between the
+    // dedicated approval method and a proposal for the identical hash).
+    for indices in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let (env, _contract_id, admin, _token, client) = setup();
+        let signers = generate_signers(&env, 3);
+        let wasm_hash = BytesN::from_array(&env, &[22u8; 32]);
+        client.set_upgrade_signers(&admin, &signers, &3u32);
+
+        let first = signers.get(indices[0]).unwrap();
+        let second = signers.get(indices[1]).unwrap();
+        let third = signers.get(indices[2]).unwrap();
+        client.propose_upgrade(&first, &wasm_hash);
+        client.approve_upgrade(&second);
+        client.propose_upgrade(&third, &wasm_hash);
+
+        // All three have already voted, even if approvals arrived out of
+        // address order. Neither API should permit a second vote.
+        assert_eq!(
+            client.try_approve_upgrade(&second),
+            Err(Ok(ContractError::AlreadyApproved)),
+        );
+        assert_eq!(
+            client.try_propose_upgrade(&third, &wasm_hash),
+            Err(Ok(ContractError::AlreadyApproved)),
+        );
+
+        // No UpgradeThresholdNotMet: with a placeholder wasm hash the host
+        // rejects the actual deployment, which confirms quorum was reached.
+        let execution = client.try_execute_upgrade();
+        assert!(
+            matches!(execution, Err(Err(_))),
+            "approved quorum must reach the deployer, not return a contract error: {execution:?}"
+        );
+    }
+}
+
 // ─── Upgrade fails without N signatures ────────────────────────────
 
 #[test]

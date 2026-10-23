@@ -159,11 +159,6 @@ pub fn propose_upgrade(
         if approvals.contains(signer.clone()) {
             return Err(ContractError::AlreadyApproved);
         }
-        if let Some(previous) = approvals.last() {
-            if previous >= signer {
-                return Err(ContractError::InvalidUpgradeConfig);
-            }
-        }
 
         approvals.push_back(signer.clone());
         env.storage()
@@ -241,11 +236,6 @@ pub fn approve_upgrade(env: Env, signer: Address) -> Result<(), ContractError> {
 
     if approvals.contains(signer.clone()) {
         return Err(ContractError::AlreadyApproved);
-    }
-    if let Some(previous) = approvals.last() {
-        if previous >= signer {
-            return Err(ContractError::InvalidUpgradeConfig);
-        }
     }
 
     approvals.push_back(signer.clone());

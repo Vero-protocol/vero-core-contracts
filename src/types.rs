@@ -16,20 +16,6 @@ pub enum Role {
     TreasuryManager = 6,
 }
 
-/// Standard contract error codes.
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-pub enum Error {
-    /// Action requires admin authorization.
-    NotAdmin = 1,
-    /// Action requires guardian authorization.
-    NotGuardian = 2,
-    /// The task has already been resolved.
-    TaskAlreadyResolved = 3,
-    /// The voter has already voted on this task.
-    DuplicateVote = 4,
-}
-
 /// A request to withdraw locked tokens.
 #[contracttype]
 #[derive(Clone)]
@@ -358,6 +344,8 @@ pub enum ContractError {
     /// deployment; upgrades must go through `propose_upgrade` /
     /// `approve_upgrade` / `execute_upgrade` instead.
     SingleSignerUpgradeDisabled = 42,
+    /// A resolved task cannot be cancelled.
+    TaskAlreadyResolved = 43,
 }
 
 #[cfg(test)]

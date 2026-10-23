@@ -347,6 +347,48 @@ fn test_task_manager_can_cancel_task() {
 }
 
 #[test]
+fn test_cancel_resolved_task_returns_typed_error_without_mutating_task() {
+    let (env, admin, token, client) = setup();
+    let manager = Address::generate(&env);
+    let guardian = Address::generate(&env);
+
+    client.grant_role(&admin, &manager, &Role::TaskManager);
+    client.register_task(&manager, &1, &1u32);
+
+    // Resolve a legitimate task via the normal guardian vote flow.
+    client.add_guardian(&admin, &guardian);
+    client.set_reputation(&admin, &guardian, &300);
+    client.set_weight_threshold(&admin, &1);
+    let token_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
+    token_client.mint(&guardian, &101);
+    client.lock_tokens(&guardian, &101);
+    client.vote(&guardian, &1);
+    assert!(client.get_task(&1).unwrap().is_done);
+
+    // Previously this case raised the legacy Error=3 via panic_with_error!;
+    // now callers receive a typed ContractError without mutation.
+    assert_eq!(
+        client.try_cancel_task(&manager, &1),
+        Err(Ok(ContractError::TaskAlreadyResolved))
+    );
+    let task = client.get_task(&1).unwrap();
+    assert!(task.is_done);
+    assert!(!task.is_cancelled);
+}
+
+#[test]
+fn test_repeated_cancel_preserves_task_cancelled_error() {
+    let (_env, admin, _token, client) = setup();
+    client.register_task(&admin, &7, &1u32);
+    client.cancel_task(&admin, &7);
+    assert_eq!(
+        client.try_cancel_task(&admin, &7),
+        Err(Ok(ContractError::TaskCancelled))
+    );
+    assert!(client.get_task(&7).unwrap().is_cancelled);
+}
+
+#[test]
 fn test_non_task_manager_cannot_cancel_task() {
     let (env, admin, _token, client) = setup();
     let manager = Address::generate(&env);

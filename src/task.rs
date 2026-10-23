@@ -1,12 +1,12 @@
 #![allow(missing_docs)]
 
-use soroban_sdk::{panic_with_error, Address, Env, Vec};
+use soroban_sdk::{Address, Env, Vec};
 
 use crate::events;
 use crate::limits::MAX_REGISTER_TASK_BATCH_SIZE;
 use crate::reentrancy;
 use crate::storage;
-use crate::types::{ContractError, DataKey, Error, Task};
+use crate::types::{ContractError, DataKey, Task};
 use crate::validation;
 
 /// A task is "terminal" when it has been fully resolved or explicitly cancelled.
@@ -106,7 +106,7 @@ pub fn cancel_task(env: &Env, _admin: Address, task_id: u64) -> Result<(), Contr
 
     let mut task = storage::get_active_task(env, task_id).ok_or(ContractError::TaskNotFound)?;
     if task.is_done {
-        panic_with_error!(env, Error::TaskAlreadyResolved);
+        return Err(ContractError::TaskAlreadyResolved);
     }
     if task.is_cancelled {
         return Err(ContractError::TaskCancelled);

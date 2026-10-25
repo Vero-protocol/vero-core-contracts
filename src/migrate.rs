@@ -9,7 +9,7 @@
 //! an atomic "Pre-Flight" validation check before committing state changes.
 
 use crate::types::{ContractError, DataKey};
-use soroban_sdk::{log, Address, Env, IntoVal, Map, TryFromVal, Val};
+use soroban_sdk::{log, Address, BytesN, Env, IntoVal, Map, TryFromVal, Val, Vec};
 
 /// The current on-chain storage schema version.
 /// Increment this constant whenever the storage layout changes.
@@ -45,6 +45,15 @@ impl<'a> MigrationCache<'a> {
         } else {
             self.env.storage().instance().get(key)
         }
+    }
+
+    /// Whether a key will exist after the staged updates and removals.
+    /// Unlike `get`, this also detects a staged value with an invalid type.
+    fn contains(&self, key: &DataKey) -> bool {
+        if self.has_removal(key) {
+            return false;
+        }
+        self.updates.contains_key(key.clone()) || self.env.storage().instance().has(key)
     }
 
     /// Write a value to the temporary cache.
@@ -184,6 +193,63 @@ pub fn validate_migration(env: &Env, cache: &MigrationCache) -> Result<(), Contr
         }
     }
 
+    // 8. Protect multi-signature upgrade configuration during migrations.
+    // Check the effective staged state, including any unstaged keys already in
+    // storage. The absence of both keys is legitimate before configuration.
+    let has_signers = cache.contains(&DataKey::UpgradeSigners);
+    let has_threshold = cache.contains(&DataKey::UpgradeThreshold);
+    let upgrade_signers = if has_signers || has_threshold {
+        let signers: Vec<Address> = cache
+            .get(&DataKey::UpgradeSigners)
+            .ok_or(ContractError::InvalidUpgradeConfig)?;
+        let threshold: u32 = cache
+            .get(&DataKey::UpgradeThreshold)
+            .ok_or(ContractError::InvalidUpgradeConfig)?;
+
+        if threshold == 0
+            || threshold > signers.len()
+            || !crate::utils::address::is_strictly_sorted_addresses(&signers)
+        {
+            log!(env, "Validation failed: invalid upgrade signer quorum.");
+            return Err(ContractError::InvalidUpgradeConfig);
+        }
+        for signer in signers.iter() {
+            crate::validation::validate_external_address(env, &signer)?;
+        }
+        Some(signers)
+    } else {
+        None
+    };
+
+    // 9. Pending proposals must be complete and use only authorized,
+    // strictly sorted and unique approvals. A half-staged proposal could
+    // otherwise become executable with an inconsistent quorum.
+    let has_pending_wasm = cache.contains(&DataKey::PendingUpgradeWasm);
+    let has_pending_approvals = cache.contains(&DataKey::PendingUpgradeApprovals);
+    if has_pending_wasm || has_pending_approvals {
+        let _: BytesN<32> = cache
+            .get(&DataKey::PendingUpgradeWasm)
+            .ok_or(ContractError::InvalidUpgradeConfig)?;
+        let approvals: Vec<Address> = cache
+            .get(&DataKey::PendingUpgradeApprovals)
+            .ok_or(ContractError::InvalidUpgradeConfig)?;
+        let signers = upgrade_signers.ok_or(ContractError::InvalidUpgradeConfig)?;
+
+        if approvals.is_empty()
+            || approvals.len() > signers.len()
+            || !crate::utils::address::is_strictly_sorted_addresses(&approvals)
+        {
+            log!(env, "Validation failed: invalid pending upgrade approvals.");
+            return Err(ContractError::InvalidUpgradeConfig);
+        }
+        for approver in approvals.iter() {
+            if !signers.contains(approver) {
+                log!(env, "Validation failed: unrecognized upgrade approver.");
+                return Err(ContractError::InvalidUpgradeConfig);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -240,6 +306,192 @@ pub fn migrate(env: &Env) -> Result<(), ContractError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    fn with_contract(run: impl FnOnce(&Env)) {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, crate::VeroContract);
+        env.as_contract(&contract_id, || run(&env));
+    }
+
+    fn prepared_cache(env: &Env) -> MigrationCache<'_> {
+        let mut cache = MigrationCache::new(env);
+        cache.set(&DataKey::StorageVersion, &CURRENT_VERSION);
+        cache
+    }
+
+    fn sorted_signers(env: &Env) -> Vec<Address> {
+        let first = Address::generate(env);
+        let second = Address::generate(env);
+        let (low, high) = if first < second {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        soroban_sdk::vec![env, low, high]
+    }
+
+    #[test]
+    fn migration_accepts_unconfigured_and_valid_upgrade_quorums() {
+        with_contract(|env| {
+            let mut cache = prepared_cache(env);
+            assert_eq!(validate_migration(env, &cache), Ok(()));
+
+            let signers = sorted_signers(env);
+            cache.set(&DataKey::UpgradeSigners, &signers);
+            cache.set(&DataKey::UpgradeThreshold, &2u32);
+            assert_eq!(validate_migration(env, &cache), Ok(()));
+        });
+    }
+
+    #[test]
+    fn migration_rejects_zero_excessive_and_missing_upgrade_thresholds() {
+        with_contract(|env| {
+            let mut cache = prepared_cache(env);
+            let signers = sorted_signers(env);
+            cache.set(&DataKey::UpgradeSigners, &signers);
+
+            // A staged signer list without a matching threshold is invalid.
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+            cache.set(&DataKey::UpgradeThreshold, &0u32);
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+            cache.set(&DataKey::UpgradeThreshold, &3u32);
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+            cache.set(&DataKey::UpgradeThreshold, &2u32);
+            assert_eq!(validate_migration(env, &cache), Ok(()));
+
+            cache.remove(&DataKey::UpgradeSigners);
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+        });
+    }
+
+    #[test]
+    fn migration_rejects_unsorted_or_duplicate_upgrade_signers() {
+        with_contract(|env| {
+            let mut cache = prepared_cache(env);
+            let signers = sorted_signers(env);
+            let low = signers.get(0).unwrap();
+            let high = signers.get(1).unwrap();
+            cache.set(&DataKey::UpgradeThreshold, &1u32);
+
+            let unsorted = soroban_sdk::vec![env, high, low.clone()];
+            cache.set(&DataKey::UpgradeSigners, &unsorted);
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+
+            let duplicated = soroban_sdk::vec![env, low.clone(), low];
+            cache.set(&DataKey::UpgradeSigners, &duplicated);
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+        });
+    }
+
+    #[test]
+    fn migration_validates_staged_threshold_against_existing_signers_without_committing() {
+        with_contract(|env| {
+            let signers = sorted_signers(env);
+            env.storage()
+                .instance()
+                .set(&DataKey::UpgradeSigners, &signers);
+            env.storage()
+                .instance()
+                .set(&DataKey::UpgradeThreshold, &2u32);
+
+            let mut cache = prepared_cache(env);
+            cache.set(&DataKey::UpgradeThreshold, &3u32);
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+            assert_eq!(
+                env.storage()
+                    .instance()
+                    .get::<_, u32>(&DataKey::UpgradeThreshold),
+                Some(2),
+            );
+
+            cache.set(&DataKey::UpgradeThreshold, &1u32);
+            assert_eq!(validate_migration(env, &cache), Ok(()));
+        });
+    }
+
+    #[test]
+    fn migration_requires_complete_pending_upgrade_proposals() {
+        with_contract(|env| {
+            let mut cache = prepared_cache(env);
+            let signers = sorted_signers(env);
+            cache.set(&DataKey::UpgradeSigners, &signers);
+            cache.set(&DataKey::UpgradeThreshold, &2u32);
+            let hash = BytesN::<32>::from_array(env, &[7u8; 32]);
+            cache.set(&DataKey::PendingUpgradeWasm, &hash);
+
+            // Proposal without approvals is incomplete.
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+            let approvals = soroban_sdk::vec![env, signers.get(0).unwrap()];
+            cache.set(&DataKey::PendingUpgradeApprovals, &approvals);
+            assert_eq!(validate_migration(env, &cache), Ok(()));
+
+            // Approvals without a proposal are equally invalid.
+            cache.remove(&DataKey::PendingUpgradeWasm);
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+        });
+    }
+
+    #[test]
+    fn migration_rejects_unknown_or_duplicate_pending_approvers() {
+        with_contract(|env| {
+            let mut cache = prepared_cache(env);
+            let signers = sorted_signers(env);
+            cache.set(&DataKey::UpgradeSigners, &signers);
+            cache.set(&DataKey::UpgradeThreshold, &1u32);
+            cache.set(
+                &DataKey::PendingUpgradeWasm,
+                &BytesN::<32>::from_array(env, &[1u8; 32]),
+            );
+
+            let outsider = Address::generate(env);
+            cache.set(
+                &DataKey::PendingUpgradeApprovals,
+                &soroban_sdk::vec![env, outsider],
+            );
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+
+            let signer = signers.get(0).unwrap();
+            cache.set(
+                &DataKey::PendingUpgradeApprovals,
+                &soroban_sdk::vec![env, signer.clone(), signer],
+            );
+            assert_eq!(
+                validate_migration(env, &cache),
+                Err(ContractError::InvalidUpgradeConfig)
+            );
+        });
+    }
 
     // Synthetic failing migration for future v1 -> v2 authors.
     //

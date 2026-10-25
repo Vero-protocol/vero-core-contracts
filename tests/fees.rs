@@ -62,3 +62,48 @@ fn test_fee_deduction() {
     assert_eq!(token_client.balance(&contract_id), 0);
     assert_eq!(token_client.balance(&guardian), 810);
 }
+
+#[test]
+fn test_fee_deduction_on_unlock_without_active_guardian() {
+    let (env, contract_id, admin, token, client) = setup();
+    let guardian = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.set_treasury_address(&admin, &treasury);
+    client.set_fee_bps(&admin, &1000);
+
+    let sac = TestTokenClient::new(&env, &token);
+    sac.mint(&guardian, &1000);
+    client.lock_tokens(&guardian, &1000);
+    client.request_unlock(&guardian);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 86401u64);
+    client.unlock_tokens(&guardian);
+
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&treasury), 190);
+    assert_eq!(token_client.balance(&contract_id), 0);
+    assert_eq!(token_client.balance(&guardian), 810);
+}
+
+#[test]
+fn test_fee_configured_without_treasury_preserves_full_amount() {
+    let (env, contract_id, admin, token, client) = setup();
+    let guardian = Address::generate(&env);
+    client.add_guardian(&admin, &guardian);
+    client.set_fee_bps(&admin, &1000);
+
+    let sac = TestTokenClient::new(&env, &token);
+    sac.mint(&guardian, &1000);
+    client.lock_tokens(&guardian, &1000);
+
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&contract_id), 1000);
+
+    client.request_unlock(&guardian);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 86401u64);
+    client.resign_guardian(&guardian);
+
+    assert_eq!(token_client.balance(&contract_id), 0);
+    assert_eq!(token_client.balance(&guardian), 1000);
+}

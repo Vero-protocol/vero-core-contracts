@@ -8,6 +8,7 @@ Thank you for your interest in contributing! This document covers everything you
 
 - [Dev Environment Setup](#dev-environment-setup)
 - [Build, Test, and Lint](#build-test-and-lint)
+- [Formal-Proof Sync Review](#formal-proof-sync-review)
 - [Branch and PR Conventions](#branch-and-pr-conventions)
 - [Good First Issues](#good-first-issues)
 - [Code of Conduct](#code-of-conduct)
@@ -110,6 +111,23 @@ powershell -ExecutionPolicy Bypass -File proofs/build.ps1
 ```
 
 See [`proofs/README.md`](proofs/README.md) for a full description of the spec files and what each invariant proves.
+
+---
+
+## Formal-Proof Sync Review
+
+When editing `consensus/src/lib.rs`, `src/contracts/voting.rs`, or any other
+code affecting weighted voting or resolution, follow the
+[Rust-to-K proof sync checklist](proofs/README.md#keeping-rust-and-k-proofs-in-sync).
+Review and update `proofs/consensus-spec.k`, `proofs/invariants.k`, and
+`proofs/proofs.k` where semantics change, alongside the relevant Rust tests and
+Kani harnesses. Run `make proofs` (or `make proofs-windows`) with K Framework
+6.0+ installed, and include the result in your PR. If it was not possible,
+explicitly write **"K proofs not run"** and request maintainer verification.
+
+The current GitHub CI checks Rust formatting, build, lint and tests; **K
+Framework and Kani formal proofs are not part of that CI**. A passing
+`cargo test` run does not constitute formal verification.
 
 ---
 

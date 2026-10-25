@@ -2,6 +2,8 @@
 
 use soroban_sdk::{symbol_short, Address, Env};
 
+use crate::types::Role;
+
 // `task_id`/`weight` are validated as `u64` in limits.rs and can
 // exceed `u32::MAX`. This guard fails to compile if either constant is
 // ever redefined to a type that can't round-trip through the `u64`s below.
@@ -72,19 +74,19 @@ pub fn emit_trusted_reporters_only_set(env: &Env, admin: &Address, enabled: bool
         .publish((symbol_short!("cb_trust"),), (admin.clone(), enabled));
 }
 
-pub fn emit_role_granted(env: &Env, caller: &Address, target: &Address, role: u8) {
-    // Pack role into u32 for Soroban SDK compatibility
+/// Emits a role assignment with the typed `Role` payload.
+pub fn emit_role_granted(env: &Env, caller: &Address, target: &Address, role: Role) {
     env.events().publish(
         (symbol_short!("role_gr"),),
-        (caller.clone(), target.clone(), role as u32),
+        (caller.clone(), target.clone(), role),
     );
 }
 
-pub fn emit_role_revoked(env: &Env, caller: &Address, target: &Address, role: u8) {
-    // Pack role into u32 for Soroban SDK compatibility
+/// Emits a role revocation with the typed `Role` payload.
+pub fn emit_role_revoked(env: &Env, caller: &Address, target: &Address, role: Role) {
     env.events().publish(
         (symbol_short!("role_rv"),),
-        (caller.clone(), target.clone(), role as u32),
+        (caller.clone(), target.clone(), role),
     );
 }
 

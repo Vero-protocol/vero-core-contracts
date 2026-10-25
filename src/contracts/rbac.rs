@@ -105,7 +105,7 @@ pub fn grant_role_internal(
     let key = DataKey::RoleAssignment(target.clone(), role);
     env.storage().instance().set(&key, &true);
 
-    events::emit_role_granted(env, caller, target, role as u8);
+    events::emit_role_granted(env, caller, target, role);
 
     Ok(())
 }
@@ -144,7 +144,7 @@ pub fn revoke_role_internal(
     let key = DataKey::RoleAssignment(target.clone(), role);
     env.storage().instance().remove(&key);
 
-    events::emit_role_revoked(env, caller, target, role as u8);
+    events::emit_role_revoked(env, caller, target, role);
 
     Ok(())
 }

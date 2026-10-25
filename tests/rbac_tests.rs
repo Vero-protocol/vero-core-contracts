@@ -1,8 +1,9 @@
 #![cfg(test)]
 
 use soroban_sdk::{
-    testutils::{Address as _, Ledger as _},
-    Address, Env,
+    symbol_short,
+    testutils::{Address as _, Events as _, Ledger as _},
+    Address, Env, FromVal, IntoVal,
 };
 use vero_core_contracts::{ContractError, Role, VeroContractClient, FAILURE_THRESHOLD};
 
@@ -60,6 +61,36 @@ fn test_initialize_grants_admin_role_to_deployer() {
 
     // The deployer should have been granted the Admin role during initialize
     assert!(client.has_role(&admin, &Role::Admin));
+}
+
+// ─── Typed Role Event Payloads (issue #158) ──────────────────────────────
+
+#[test]
+fn grant_and_revoke_role_events_publish_the_typed_role() {
+    let (env, admin, _token, client) = setup();
+    let target = Address::generate(&env);
+
+    for role in [
+        Role::GuardianManager,
+        Role::TaskManager,
+        Role::ConfigManager,
+        Role::EmergencyManager,
+        Role::TreasuryManager,
+    ] {
+        client.grant_role(&admin, &target, &role);
+        let emitted = env.events().all();
+        let (_, topics, data) = emitted.get(emitted.len() - 1).unwrap();
+        assert_eq!(topics, (symbol_short!("role_gr"),).into_val(&env));
+        let decoded = <(Address, Address, Role)>::from_val(&env, &data);
+        assert_eq!(decoded, (admin.clone(), target.clone(), role));
+
+        client.revoke_role(&admin, &target, &role);
+        let emitted = env.events().all();
+        let (_, topics, data) = emitted.get(emitted.len() - 1).unwrap();
+        assert_eq!(topics, (symbol_short!("role_rv"),).into_val(&env));
+        let decoded = <(Address, Address, Role)>::from_val(&env, &data);
+        assert_eq!(decoded, (admin.clone(), target.clone(), role));
+    }
 }
 
 // ─── Role Assignment Tests ──────────────────────────────────────────

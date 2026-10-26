@@ -32,7 +32,7 @@ pub enum Error {
 
 /// A request to withdraw locked tokens.
 #[contracttype]
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WithdrawalRequest {
     /// Unique identifier for the withdrawal request.
     pub id: u64,
@@ -358,6 +358,14 @@ pub enum ContractError {
     /// deployment; upgrades must go through `propose_upgrade` /
     /// `approve_upgrade` / `execute_upgrade` instead.
     SingleSignerUpgradeDisabled = 42,
+    /// Requested treasury withdrawal ID does not exist.
+    WithdrawalNotFound = 43,
+    /// Treasury withdrawal request has already been cancelled.
+    WithdrawalCancelled = 44,
+    /// Treasury withdrawal request has already been executed.
+    WithdrawalAlreadyExecuted = 45,
+    /// Treasury withdrawal timelock window has not yet elapsed.
+    TimeLockActive = 46,
 }
 
 #[cfg(test)]

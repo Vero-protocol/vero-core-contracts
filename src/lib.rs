@@ -34,6 +34,8 @@ mod reputation;
 mod storage;
 mod task;
 mod timelock;
+/// Timelocked treasury withdrawal request lifecycle.
+pub mod treasury;
 mod types;
 mod utils;
 /// Parameter and address validation helpers.
@@ -43,7 +45,7 @@ pub use contracts::proxy_entry::{VeroContract, VeroContractClient};
 pub use limits::MAX_WEIGHT_THRESHOLD;
 pub use types::{
     BatchCall, ContractError, DataKey, GuardianEntry, Operation, RewardStream, Role, Snapshot,
-    SnapshotMeta, Task,
+    SnapshotMeta, Task, WithdrawalRequest,
 };
 
 pub use circuit_breaker::FAILURE_THRESHOLD;

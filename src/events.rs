@@ -217,6 +217,28 @@ pub fn emit_vault_release_failed(env: &Env, task_id: u64) {
     env.events().publish((symbol_short!("vault_err"),), task_id);
 }
 
+/// Emits an event when a timelocked treasury withdrawal is requested.
+pub fn emit_withdrawal_requested(env: &Env, request_id: u64, recipient: &Address, amount: i128) {
+    env.events().publish(
+        (symbol_short!("wd_req"),),
+        (request_id, recipient.clone(), amount),
+    );
+}
+
+/// Emits an event when a timelocked treasury withdrawal is executed.
+pub fn emit_withdrawal_executed(env: &Env, request_id: u64, recipient: &Address, amount: i128) {
+    env.events().publish(
+        (symbol_short!("wd_exec"),),
+        (request_id, recipient.clone(), amount),
+    );
+}
+
+/// Emits an event when a timelocked treasury withdrawal is cancelled.
+pub fn emit_withdrawal_cancelled(env: &Env, request_id: u64) {
+    env.events()
+        .publish((symbol_short!("wd_cncl"),), request_id);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

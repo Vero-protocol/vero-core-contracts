@@ -156,4 +156,10 @@ pub enum DataKey {
     /// Number of occupied task index slots.
     /// Singleton key tracking total count of indexed tasks in dense slot storage.
     TaskIndexCount,
+    /// Monotonically increasing counter for treasury withdrawal requests.
+    /// Singleton instance key holding the latest withdrawal request ID.
+    WithdrawalCounter,
+    /// Treasury withdrawal request record indexed by request ID.
+    /// Namespaces `WithdrawalRequest` state (`DataKey::WithdrawalRequest(u64)`).
+    WithdrawalRequest(u64),
 }

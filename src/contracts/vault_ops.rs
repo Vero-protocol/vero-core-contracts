@@ -11,6 +11,7 @@ use soroban_sdk::{Address, Env};
 
 pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<(), ContractError> {
     circuit_breaker::require_not_paused(env)?;
+    crate::validation::validate_token_amount(amount)?;
     guardian.require_auth();
     let token: Address = env
         .storage()
@@ -24,6 +25,28 @@ pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<
     if fee_bps > 0 {
         let fee_amount = (amount * (fee_bps as i128)) / 10000;
         if fee_amount > 0 {
+            if let Some(_treasury) = env
+                .storage()
+                .instance()
+                .get::<_, Address>(&DataKey::TreasuryAddress)
+            {
+                net_amount = amount - fee_amount;
+            }
+        }
+    }
+
+    let key = DataKey::LockedBalance(guardian.clone());
+    let prev: i128 = env.storage().instance().get(&key).unwrap_or(0);
+    let new_balance = prev
+        .checked_add(net_amount)
+        .ok_or(ContractError::InvalidRange)?;
+    if new_balance > crate::limits::MAX_TOKEN_AMOUNT {
+        return Err(ContractError::InvalidRange);
+    }
+
+    if fee_bps > 0 {
+        let fee_amount = (amount * (fee_bps as i128)) / 10000;
+        if fee_amount > 0 {
             if let Some(treasury) = env
                 .storage()
                 .instance()
@@ -31,16 +54,13 @@ pub(crate) fn lock_tokens(env: &Env, guardian: Address, amount: i128) -> Result<
             {
                 let token_client = soroban_sdk::token::Client::new(env, &token);
                 token_client.transfer(&guardian, &treasury, &fee_amount);
-                net_amount = amount - fee_amount;
             }
         }
     }
 
     let token_client = soroban_sdk::token::Client::new(env, &token);
     token_client.transfer(&guardian, &env.current_contract_address(), &net_amount);
-    let key = DataKey::LockedBalance(guardian.clone());
-    let prev: i128 = env.storage().instance().get(&key).unwrap_or(0);
-    env.storage().instance().set(&key, &(prev + net_amount));
+    env.storage().instance().set(&key, &new_balance);
     events::emit_tokens_locked(env, &guardian, amount);
     Ok(())
 }

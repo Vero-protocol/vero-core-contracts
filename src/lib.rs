@@ -40,7 +40,11 @@ mod utils;
 pub mod validation;
 
 pub use contracts::proxy_entry::{VeroContract, VeroContractClient};
-pub use limits::MAX_WEIGHT_THRESHOLD;
+pub use limits::{
+    MAX_LOCK_THRESHOLD, MAX_REGISTER_TASK_BATCH_SIZE, MAX_REPUTATION_SCORE, MAX_TASK_ID,
+    MAX_TOKEN_AMOUNT, MAX_WEIGHT_THRESHOLD,
+};
+pub use task::register_tasks;
 pub use types::{
     BatchCall, ContractError, DataKey, GuardianEntry, Operation, RewardStream, Role, Snapshot,
     SnapshotMeta, Task,

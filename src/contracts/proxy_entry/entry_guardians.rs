@@ -17,6 +17,7 @@ impl VeroContract {
     pub fn add_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
         validate_address(&env, &admin)?;
         validate_address(&env, &guardian)?;
+        crate::validation::validate_distinct_addresses(&admin, &guardian)?;
         circuit_breaker::require_not_paused(&env)?;
         crate::contracts::rbac::require_role(&env, &admin, crate::types::Role::GuardianManager)?;
         guardian::add_guardian(&env, admin.clone(), guardian.clone())?;

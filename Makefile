@@ -5,14 +5,16 @@
 #   build            — Compile the WASM contract
 #   test             — Run all unit and integration tests
 #   check            — Quick syntax check without full compilation
+#   fmt              — Format all Rust source files with rustfmt
+#   lint             — Run Clippy across all targets with warnings denied
 #   verify           — Run Kani formal verification harnesses
 #   invariants       — Run runtime safety invariant tests
 #   proofs           — Run K-framework proofs on Linux/macOS (requires K Framework)
 #   proofs-windows   — Run K-framework proofs on Windows via PowerShell (requires K Framework)
 #   deploy-testnet   — Upload WASM and deploy a fresh instance on testnet
-#   all              — Build, test, and verify
+#   all              — Format, lint, check, test, and verify
 
-.PHONY: build test check verify invariants proofs proofs-windows deploy-testnet all
+.PHONY: build test check fmt lint verify invariants proofs proofs-windows deploy-testnet all
 
 build:
 	cargo build --target wasm32-unknown-unknown --release
@@ -22,6 +24,12 @@ test:
 
 check:
 	cargo check
+
+fmt:
+	cargo fmt
+
+lint:
+	cargo clippy --all-targets -- -D warnings
 
 # Kani proof harnesses (requires cargo-kani installed)
 verify:
@@ -70,4 +78,4 @@ initialize-testnet:
 		--token $(TOKEN_CONTRACT_ID) \
 		--lock_threshold $(LOCK_THRESHOLD)
 
-all: check test invariants verify
+all: fmt lint check test invariants verify

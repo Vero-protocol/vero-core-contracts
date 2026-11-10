@@ -286,6 +286,8 @@ pub enum Operation {
     Pause = 28,
     /// `unpause` — resume the contract.
     Unpause = 29,
+    /// `retry_vault_release` — retry funds release for a task with a pending release.
+    RetryVaultRelease = 30,
 }
 
 #[contracterror]
@@ -358,6 +360,8 @@ pub enum ContractError {
     /// deployment; upgrades must go through `propose_upgrade` /
     /// `approve_upgrade` / `execute_upgrade` instead.
     SingleSignerUpgradeDisabled = 42,
+    /// The task has no pending vault release to retry.
+    NoPendingRelease = 43,
 }
 
 #[cfg(test)]

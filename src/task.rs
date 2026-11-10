@@ -216,6 +216,11 @@ pub fn purge_task(env: &Env, _admin: Address, task_id: u64) -> Result<(), Contra
         .instance()
         .set(&DataKey::AllRewardStreams, &updated_streams);
 
+    // 5. Remove any pending vault release record and compact index.
+    if storage::has_pending_release(env, task_id) {
+        storage::remove_pending_release(env, task_id);
+    }
+
     events::emit_task_purged(env, task_id);
 
     Ok(())

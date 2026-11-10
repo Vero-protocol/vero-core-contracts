@@ -72,3 +72,51 @@ pub fn append_task_voter(env: &Env, task_id: u64, voter: &Address) {
         .instance()
         .set(&task_voters_key(task_id), &voters);
 }
+
+pub fn pending_release_key(task_id: u64) -> DataKey {
+    DataKey::PendingRelease(task_id)
+}
+
+pub fn has_pending_release(env: &Env, task_id: u64) -> bool {
+    env.storage().instance().has(&pending_release_key(task_id))
+}
+
+pub fn get_pending_releases(env: &Env) -> Vec<u64> {
+    env.storage()
+        .instance()
+        .get(&DataKey::AllPendingReleases)
+        .unwrap_or(Vec::new(env))
+}
+
+pub fn set_pending_release(env: &Env, task_id: u64) {
+    if !has_pending_release(env, task_id) {
+        env.storage()
+            .instance()
+            .set(&pending_release_key(task_id), &true);
+
+        let mut all_pending = get_pending_releases(env);
+        all_pending.push_back(task_id);
+        env.storage()
+            .instance()
+            .set(&DataKey::AllPendingReleases, &all_pending);
+    }
+}
+
+pub fn remove_pending_release(env: &Env, task_id: u64) {
+    if has_pending_release(env, task_id) {
+        env.storage()
+            .instance()
+            .remove(&pending_release_key(task_id));
+
+        let all_pending = get_pending_releases(env);
+        let mut updated = Vec::new(env);
+        for id in all_pending.iter() {
+            if id != task_id {
+                updated.push_back(id);
+            }
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::AllPendingReleases, &updated);
+    }
+}

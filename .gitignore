@@ -8,3 +8,5 @@ Cargo.lock
 coverage/
 # JetBrains IDEs (RustRover, IntelliJ, etc.)
 .idea/
+config.bat
+node_modules
